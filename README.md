@@ -10,7 +10,7 @@ Jérôme Blanchi aka d.j.a.y
 
 # Usage
 ```
-usage: archimusik.py [-h] -i IMAGE [-m MODE]
+usage: archimusik.py [-h] -i IMAGE [-m MODE] [-d DIRECTION] [-n] [-v]
 
 What about played music from structural architecture elements ?
 ArchMusik is an image music player for architecture elements.
@@ -23,6 +23,11 @@ optional arguments:
   -i IMAGE, --image IMAGE
                         Path to the input image
   -m MODE, --mode MODE  Play mode : Head=1 (default) , Sequence=2
+  -d DIRECTION, --direction DIRECTION
+                        Mode direction : TtoB=1 (default) , BtoT=2 , RtoL=3 ,
+                        LtoR=4
+  -n, --normalize       Do NOT normalize the shapes when active
+  -v, --verbose         Enable debug output (default: off)
 ```
 
 See the file [Issue.md](Issues.md) for known problem and task list and [LICENSE.md](LICENSE.md)
