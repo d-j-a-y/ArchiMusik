@@ -6,17 +6,23 @@
 
 ##FIXME
 #less contours loop!
-#area (aka frequency) is link to image size!
-#sleep time should be smarter !
+#(DONE)area (aka frequency) is link to image size!
+#(HALFDONE)sleep time should be smarter ! FIXME : shape
 
 ##TODO
 #start a bunch of thread; aka thread list
 #thread bunch number as arg
+#more sleep time (note time up) options (area based even for direc?)
 
 
 ##BRAINSTROM
 # play head a variable thickness to create a time gap in wich is possible to move the shapes ->sound effect
 # play head control from external device : kinect+hand / turntable / ....
+
+
+##WHAT THE HECK
+#In directional mode, a note if played from in to out.
+#In shape mode, FIXME
 
 ## import the necessary packages
 ### python internals
@@ -41,7 +47,7 @@ RIGHTLEFT=3
 LEFTRIGHT=4
 
 MODE_HEAD =     1
-MODE_SEQUENCE = 2
+MODE_SHAPE =    2
 
 DIRECTION_TOPBOTTOM=1
 DIRECTION_BOTTOMTOP=2
@@ -67,7 +73,7 @@ class ThreadPlaySine(threading.Thread):
         self.duration = duration
         
     def run(self):
-        area = cv2.contourArea(self.contour) #FIXME area (aka frequency) is link to image size!
+        area = cv2.contourArea(self.contour)
         # ~ a = Sine(mul=0.01).out()
         # add a bit of dissonance to left channel TODO rnd +/- ?
         bit_of_disso = 100
@@ -76,13 +82,15 @@ class ThreadPlaySine(threading.Thread):
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, cnt, duration):
+    def __init__(self, cnt, area, duration):
         threading.Thread.__init__(self)
         self.contour = cnt
+        self.area = area
         self.duration = duration
 
     def run(self):
-        area = cv2.contourArea(self.contour) #FIXME area (aka frequency) is link to image size!
+        # ~ area = cv2.contourArea(self.contour)
+        area = self.area
         # ~ a = Sine(mul=0.01).out()
         lfo = Sine(1, 0, .1, .1)
         # add a bit of dissonance to left channel TODO rnd +/- ?
@@ -92,15 +100,16 @@ class ThreadPlaySineLoop(threading.Thread):
 
 class ArchiMusik():
     """Explicit lyrics"""
-    def __init__(self, mode, direction, normalize=True):
+    def __init__(self, mode, direction, normalize=True, factorize=True):
         self.mode = mode
         self.direction = direction
         self.normalize = normalize
+        self.factorize = factorize
 
     def play(self):
         if self.mode == MODE_HEAD:
-            readHeadLoop(self.contours, self.direction)
-        elif self.mode == MODE_SEQUENCE:
+            readHeadLoop(self.contours, self.factorizedArea, self.direction)
+        elif self.mode == MODE_SHAPE:
             contoursLoop(self.contours)
 
     def loadImage(self, img): #FIXME test on  image load !
@@ -124,6 +133,8 @@ class ArchiMusik():
         if (self.normalize):
             self.contours = self.normalizedContours()
         self.simplebounds = self.getSimpleBounds()
+        self.factorizedArea = self.getFactorizedArea ()
+        print (self.factorizedArea)
 
     def normalizedContours(self):
         contoursNorm=[]
@@ -139,6 +150,21 @@ class ArchiMusik():
                 contoursNorm.append(contour)
 
         return contoursNorm
+
+    def getFactorizedArea(self):
+        factorizedArea = []
+        nonfactorizedArea = []
+        if(self.factorize == True):
+            factor = (REF307200/(self.resolution[0]*self.resolution[1]))
+        else:
+            factor = 1
+        for contour in self.contours:
+            area = cv2.contourArea(contour)
+            factorizedArea.append(int(area * factor))
+            nonfactorizedArea.append(int(area))
+
+        print (nonfactorizedArea)
+        return factorizedArea
 
     def getSimpleBound(self, cnt):
         top = tuple(cnt[cnt[:,:,1].argmin()][0])
@@ -208,7 +234,7 @@ def readHeadDraw (startPos, endPos):
 def isCollision (a, b): # (x,y,width,height)
   return ((abs(a[0] - b[0]) * 2 < (a[2] + b[2])) & (abs(a[1] - b[1]) * 2 < (a[3] + b[3])))
 
-def readHeadLoop (cnts, readDirection):
+def readHeadLoop (cnts, areas, readDirection):
     rows,cols = archiMusik.thresh.shape[:2]
     readSpeed = .05
 
@@ -238,7 +264,7 @@ def readHeadLoop (cnts, readDirection):
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[SB_TOP][SB_Y] == y0):
                     length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], length*readSpeed)
+                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
                     th_playSine.start()
                 i+=1
 
@@ -258,7 +284,7 @@ def readHeadLoop (cnts, readDirection):
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[SB_BOTTOM][SB_Y] == y0):
                     length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], length*readSpeed)
+                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
                     th_playSine.start()
                 i+=1
 
@@ -278,7 +304,7 @@ def readHeadLoop (cnts, readDirection):
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[SB_RIGHT][SB_X] == x0):
                     length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], length*readSpeed)
+                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
                     th_playSine.start()
                 i+=1
 
@@ -298,7 +324,7 @@ def readHeadLoop (cnts, readDirection):
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[SB_LEFT][SB_X] == x0):
                     length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], length*readSpeed)
+                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
                     th_playSine.start()
                 i+=1
 
@@ -424,17 +450,20 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--image",    required=True,
                         help="Path to the input image")
     parser.add_argument("-m", "--mode",     required=False, default=MODE_HEAD,
-                        help="Play mode : Head="+str(MODE_HEAD)+" (default) , Sequence="+str(MODE_SEQUENCE)+"")
+                        help="Play mode : Head="+str(MODE_HEAD)+" (default) , Shape="+str(MODE_SHAPE)+"")
     parser.add_argument("-d", "--direction",required=False, default=DIRECTION_TOPBOTTOM,
                         help="Mode direction : TtoB="+ str(TOPBOTTOM) +" (default) , BtoT=" + str(BOTTOMTOP) + " , RtoL=" + str(RIGHTLEFT) + " , LtoR=" + str(LEFTRIGHT))
     parser.add_argument("-n", "--normalize",required=False, default=True, action='store_false',
                         help="Do NOT normalize the shapes when active") #TODO Normalize
+    parser.add_argument("-f", "--factorize",required=False, default=True, action='store_false',
+                        help="Do NOT factorize the areas when active") #TODO facto
     parser.add_argument('-v', '--verbose', required=False,action='count', default=0,
                         help='Enable debug output (default: off)')
 
     args = vars(parser.parse_args())
 
     argNormalize = args["normalize"]
+    argFactorize = args["factorize"]
     argMode = int(args["mode"])
     argDirection = int(args["direction"])
 
@@ -447,7 +476,7 @@ if __name__ == "__main__":
     # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
-    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argNormalize)
+    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argNormalize, argFactorize)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
