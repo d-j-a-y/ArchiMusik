@@ -107,14 +107,14 @@ class ArchiMusik():
         # load the image, convert it to grayscale, blur it slightly,
         # and threshold it
         self.image = cv2.imread(img)
-        # ~ print (self.image)
-        # ~ TEST NONE !!
-        self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
-        self.thresh = cv2.threshold(self.blurred, 60, 255, cv2.THRESH_BINARY)[1]
-        self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
-
-
+        if (self.image is None):
+            raise ValueError('A very bad thing happened : can\'t load file : ' + img)
+        else :
+            # ~ TEST NONE !!
+            self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+            self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
+            self.thresh = cv2.threshold(self.blurred, 60, 255, cv2.THRESH_BINARY)[1]
+            self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
 
     def findContours(self, normalize=None):
         _, threshold = cv2.threshold(self.thresh, 240, 255, cv2.THRESH_BINARY)
@@ -164,7 +164,9 @@ def printDebug (data):
         print (data)
 
 def printError (data):
-    print ("Fatal ERROR detected\n\n"+data+"\n\nProgram stop now")
+    print ("***Fatal ERROR detected***\n------------------------------")
+    print (data)
+    print ("----------------------------------------\nProgram stop now")
 
 # ~ def playSineNotNormalized (contour):
     # ~ area = cv2.contourArea(contour)
@@ -447,10 +449,12 @@ if __name__ == "__main__":
 
     archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argNormalize)
     imagePath = args["image"]
-    err = archiMusik.loadImage(imagePath)
-    # ~ if (err != NO_ERROR):
-        # ~ printError(("Error loading the image :"+imagePath) )
-        # ~ exitme() #TODO stop server ?
+    try:
+        archiMusik.loadImage(imagePath)
+    except ValueError as err:
+        printError(err.args)
+        exitme() #TODO stop server ?
+
     printDebug(archiMusik.resolution)
 
     # output image declaration
