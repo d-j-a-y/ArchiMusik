@@ -10,6 +10,18 @@ Jérôme Blanchi aka d.j.a.y
 
 # Usage
 ```
+PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO
+Your are viewing some not released work... good luck!
+PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO
+```
+
+Quick start:
+```
+$ /path/to/python3 archimusik.py -i ./test/rondrondrond.jpg
+```
+
+Long story:
+```
 usage: archimusik.py [-h] -i IMAGE [-m MODE] [-d DIRECTION] [-n] [-v]
 
 What about played music from structural architecture elements ?
@@ -36,17 +48,16 @@ for information about copyright and usage terms.
 Version [__Prototype__ | ~~Alpha~~ | ~~Beta~~ | ~~Released~~]
 
 # Dependencies
-* [OpenCV](http://opencv.org/), based on opencv 3.2
-
 ___Important___ : Only tested with OpenCV 3.2
 
-```
-pip3 install Wand
-```
-* [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
-* [Numpy](-), -.
+* [OpenCV](http://opencv.org/), based on opencv 3.2
+* Python 3 bindings for the computer vision library (Debian Package: python3-opencv)
 
+## Python3 packages
+* [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
+* [Numpy](https://numpy.org/), scientific computing.
 * [pyliblo](http://das.nasophon.de/pyliblo/), pyliblo is a Python wrapper for the liblo OSC library.
+
 ```
-pip3 install pyliblo
+/path/to/python3 -m pip install numpy pyo pyliblo --user --upgrade
 ```
