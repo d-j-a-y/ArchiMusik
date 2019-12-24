@@ -13,16 +13,18 @@
 #start a bunch of thread; aka thread list
 #thread bunch number as arg
 #more sleep time (note time up) options (area based even for direc?)
+#add a contrast / thershold option
 
 
 ##BRAINSTROM
 # play head a variable thickness to create a time gap in wich is possible to move the shapes ->sound effect
 # play head control from external device : kinect+hand / turntable / ....
+# install - des jumelles pour voir le paysage qui lisent le paysage .... (matthias singer)
 
 
 ##WHAT THE HECK
 #In directional mode, a note if played from in to out.
-#In shape mode, FIXME
+#In sequence mode, FIXME
 
 ## import the necessary packages
 ### python internals
@@ -35,19 +37,14 @@ import numpy as np
 import cv2
 from pyo import *
 
-defDebug = False
+defDebug = True #FIXME (comment for no debug)
 
 REF307200=307200
 MAX88116=88116
 MIN103=103
 
-TOPBOTTOM=1
-BOTTOMTOP=2
-RIGHTLEFT=3
-LEFTRIGHT=4
-
 MODE_HEAD =     1
-MODE_SHAPE =    2
+MODE_SEQUENCE = 2
 
 DIRECTION_TOPBOTTOM=1
 DIRECTION_BOTTOMTOP=2
@@ -67,13 +64,15 @@ ERROR = 0
 
 class ThreadPlaySine(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, cnt, duration):
+    def __init__(self, cnt, area, duration):
         threading.Thread.__init__(self)
         self.contour = cnt
+        self.area = area
         self.duration = duration
         
     def run(self):
-        area = cv2.contourArea(self.contour)
+        # ~ area = cv2.contourArea(self.contour)
+        area = self.area
         # ~ a = Sine(mul=0.01).out()
         # add a bit of dissonance to left channel TODO rnd +/- ?
         bit_of_disso = 100
@@ -100,26 +99,26 @@ class ThreadPlaySineLoop(threading.Thread):
 
 class ArchiMusik():
     """Explicit lyrics"""
-    def __init__(self, mode, direction, normalize=True, factorize=True):
+    def __init__(self, mode, direction, matchshape, normalize, factorize):
         self.mode = mode
         self.direction = direction
         self.normalize = normalize
         self.factorize = factorize
+        self.matchshape = matchshape
 
     def play(self):
         if self.mode == MODE_HEAD:
-            readHeadLoop(self.contours, self.factorizedArea, self.direction)
-        elif self.mode == MODE_SHAPE:
+            self.readHeadLoop()
+        elif self.mode == MODE_SEQUENCE:
             contoursLoop(self.contours)
 
-    def loadImage(self, img): #FIXME test on  image load !
+    def loadImage(self, img):
         # load the image, convert it to grayscale, blur it slightly,
         # and threshold it
         self.image = cv2.imread(img)
         if (self.image is None):
             raise ValueError('A very bad thing happened : can\'t load file : ' + img)
         else :
-            # ~ TEST NONE !!
             self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
             self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
             self.thresh = cv2.threshold(self.blurred, 60, 255, cv2.THRESH_BINARY)[1]
@@ -131,10 +130,10 @@ class ArchiMusik():
         if (normalize != None):
             self.normalize = normalize
         if (self.normalize):
-            self.contours = self.normalizedContours()
+            self.contours = self.normalizedContours() #FIXME less contours loop
         self.simplebounds = self.getSimpleBounds()
         self.factorizedArea = self.getFactorizedArea ()
-        print (self.factorizedArea)
+        self.approxcontours = self.approxContours()
 
     def normalizedContours(self):
         contoursNorm=[]
@@ -142,7 +141,7 @@ class ArchiMusik():
         # 88116 and 103 come from 640x480 image set test (307200 area) - rondrondrong.jpg TODO carrecarrecarre.jpg
         maxArea = int((imgArea/REF307200)*MAX88116)
         minArea = int((imgArea/REF307200)*MIN103)
-        printDebug ((self.resolution,"Image area:",imgArea,"min:max", minArea, maxArea))
+        # ~ printDebug (("normalizedContours:", self.resolution,"Image area:",imgArea,"min:max", minArea, maxArea))
         for contour in self.contours:
             area = int(cv2.contourArea(contour))
             printDebug (("contour area " , area))
@@ -161,9 +160,12 @@ class ArchiMusik():
         for contour in self.contours:
             area = cv2.contourArea(contour)
             factorizedArea.append(int(area * factor))
-            nonfactorizedArea.append(int(area))
+            # ~ if 'defDebug' in globals():
+                # ~ nonfactorizedArea.append(int(area))
 
-        print (nonfactorizedArea)
+        # ~ printDebug (("AREA before factor: ",nonfactorizedArea))
+        # ~ printDebug (("AREA after factor: ",factorizedArea))
+
         return factorizedArea
 
     def getSimpleBound(self, cnt):
@@ -176,16 +178,121 @@ class ArchiMusik():
     def getSimpleBounds(self):
         simpleBounds = []
         for cnt in self.contours:
-            # ~ sb = getSimpleBound (cnt)
-            # ~ printDebug (sb)
-            # ~ simpleBounds.append(sb)
             simpleBounds.append(self.getSimpleBound(cnt))
         return simpleBounds
+
+    def approxContour(self, cnt):
+        approx = (cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True))
+        return approx
+
+    def approxContours(self):
+        approx=[]
+        for cnt in self.contours:
+            approx.append (approxContour(cnt))
+        return approx
+
+    def readHeadLoop (self):
+        rows,cols = self.thresh.shape[:2]
+        readSpeed = .05
+
+        if (False): #TEST single point TEST
+            cnt = self.contours[1]
+            topmost = tuple(cnt[cnt[:,:,1].argmin()][0])
+            # ~ cv2.circle(thresh, topmost, 5, (255,255,0))
+            printDebug ("mon topmost",topmost)
+
+        # ~ simpleBounds = getSimpleBounds(cnts)
+        # ~ printDebug (len(simpleBounds))
+
+        soundServer.start()
+
+        if (self.direction == DIRECTION_TOPBOTTOM):
+            x0 = 0
+            y0 = 0
+            x1 = cols-1
+            y1 = 0
+            for row in range(rows):
+                readheadImg = readHeadDraw((x0,y0), (x1,y1))
+                i = 0
+                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
+                for sb in self.simplebounds:
+                    # ~ isCollision((x0, y0, x1-x0,1),())
+                    if (sb[SB_TOP][SB_Y] == y0):
+                        length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
+                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine.start()
+                    i+=1
+
+                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+                y0 = y1 = row
+                time.sleep(readSpeed)
+        elif (self.direction == DIRECTION_BOTTOMTOP):
+            x0 = 0
+            y0 = rows-1
+            x1 = cols-1
+            y1 = rows-1
+            for row in range(rows):
+                readheadImg = readHeadDraw((x0,y0), (x1,y1))
+                i = 0
+                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
+                for sb in self.simplebounds:
+                    # ~ isCollision((x0, y0, x1-x0,1),())
+                    if (sb[SB_BOTTOM][SB_Y] == y0):
+                        length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
+                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine.start()
+                    i+=1
+
+                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+                y0 = y1 = (rows-1)-row
+                time.sleep(readSpeed)
+        elif (self.direction == DIRECTION_RIGHTLEFT):
+            x0 = cols-1
+            y0 = 0
+            x1 = cols-1
+            y1 = rows-1
+            for col in range(cols):
+                readheadImg = readHeadDraw((x0,y0), (x1,y1))
+                i = 0
+                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
+                for sb in self.simplebounds:
+                    # ~ isCollision((x0, y0, x1-x0,1),())
+                    if (sb[SB_RIGHT][SB_X] == x0):
+                        length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
+                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine.start()
+                    i+=1
+
+                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+                x0 = x1 = (cols-1)-col
+                time.sleep(readSpeed)
+        elif (self.direction == DIRECTION_LEFTRIGHT):
+            x0 = 0
+            y0 = 0
+            x1 = 0
+            y1 = rows-1
+            for col in range(cols):
+                readheadImg = readHeadDraw((x0,y0), (x1,y1))
+                i = 0
+                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
+                for sb in self.simplebounds:
+                    # ~ isCollision((x0, y0, x1-x0,1),())
+                    if (sb[SB_LEFT][SB_X] == x0):
+                        length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
+                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine.start()
+                    i+=1
+
+                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+                x0 = x1 = col
+                time.sleep(readSpeed)
+
+        soundServer.stop()
 
 def exitme(code=0):
     sys.exit(code)
 
-def printDebug (data):
+def printDebug (data): #FIXME defDebug = True (comment for no debug)
     if 'defDebug' in globals():
         print (data)
 
@@ -233,106 +340,6 @@ def readHeadDraw (startPos, endPos):
 
 def isCollision (a, b): # (x,y,width,height)
   return ((abs(a[0] - b[0]) * 2 < (a[2] + b[2])) & (abs(a[1] - b[1]) * 2 < (a[3] + b[3])))
-
-def readHeadLoop (cnts, areas, readDirection):
-    rows,cols = archiMusik.thresh.shape[:2]
-    readSpeed = .05
-
-    # ~ approxcnt = approxContours(cnt)
-
-    if (False): #TEST single point TEST
-        cnt = cnts[1]
-        topmost = tuple(cnt[cnt[:,:,1].argmin()][0])
-        # ~ cv2.circle(thresh, topmost, 5, (255,255,0))
-        printDebug ("mon topmost",topmost)
-
-    # ~ simpleBounds = getSimpleBounds(cnts)
-    # ~ printDebug (len(simpleBounds))
-
-    soundServer.start()
-
-    if (readDirection == TOPBOTTOM):
-        x0 = 0
-        y0 = 0
-        x1 = cols-1
-        y1 = 0
-        for row in range(rows):
-            readheadImg = readHeadDraw((x0,y0), (x1,y1))
-            i = 0
-            # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-            for sb in archiMusik.simplebounds:
-                # ~ isCollision((x0, y0, x1-x0,1),())
-                if (sb[SB_TOP][SB_Y] == y0):
-                    length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
-                    th_playSine.start()
-                i+=1
-
-            cv2.imshow("ARchiMusik", cv2.add (readheadImg, archiMusik.thresh))
-            y0 = y1 = row
-            time.sleep(readSpeed)
-    elif (readDirection == BOTTOMTOP):
-        x0 = 0
-        y0 = rows-1
-        x1 = cols-1
-        y1 = rows-1
-        for row in range(rows):
-            readheadImg = readHeadDraw((x0,y0), (x1,y1))
-            i = 0
-            # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-            for sb in archiMusik.simplebounds:
-                # ~ isCollision((x0, y0, x1-x0,1),())
-                if (sb[SB_BOTTOM][SB_Y] == y0):
-                    length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
-                    th_playSine.start()
-                i+=1
-
-            cv2.imshow("ARchiMusik", cv2.add (readheadImg, archiMusik.thresh))
-            y0 = y1 = (rows-1)-row
-            time.sleep(readSpeed)
-    elif (readDirection == RIGHTLEFT):
-        x0 = cols-1
-        y0 = 0
-        x1 = cols-1
-        y1 = rows-1
-        for col in range(cols):
-            readheadImg = readHeadDraw((x0,y0), (x1,y1))
-            i = 0
-            # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-            for sb in archiMusik.simplebounds:
-                # ~ isCollision((x0, y0, x1-x0,1),())
-                if (sb[SB_RIGHT][SB_X] == x0):
-                    length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
-                    th_playSine.start()
-                i+=1
-
-            cv2.imshow("ARchiMusik", cv2.add (readheadImg, archiMusik.thresh))
-            x0 = x1 = (cols-1)-col
-            time.sleep(readSpeed)
-    elif (readDirection == LEFTRIGHT):
-        x0 = 0
-        y0 = 0
-        x1 = 0
-        y1 = rows-1
-        for col in range(cols):
-            readheadImg = readHeadDraw((x0,y0), (x1,y1))
-            i = 0
-            # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-            for sb in archiMusik.simplebounds:
-                # ~ isCollision((x0, y0, x1-x0,1),())
-                if (sb[SB_LEFT][SB_X] == x0):
-                    length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                    th_playSine = ThreadPlaySineLoop(cnts[i], areas[i], length*readSpeed)
-                    th_playSine.start()
-                i+=1
-
-            cv2.imshow("ARchiMusik", cv2.add (readheadImg, archiMusik.thresh))
-            x0 = x1 = col
-            time.sleep(readSpeed)
-
-    soundServer.stop()
 
 def approxContour(cnt):
     approx = (cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True))
@@ -450,9 +457,14 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--image",    required=True,
                         help="Path to the input image")
     parser.add_argument("-m", "--mode",     required=False, default=MODE_HEAD,
-                        help="Play mode : Head="+str(MODE_HEAD)+" (default) , Shape="+str(MODE_SHAPE)+"")
+                        help="Play mode : Head="+str(MODE_HEAD)+" (default) , Sequence="+str(MODE_SEQUENCE)+"")
     parser.add_argument("-d", "--direction",required=False, default=DIRECTION_TOPBOTTOM,
-                        help="Mode direction : TtoB="+ str(TOPBOTTOM) +" (default) , BtoT=" + str(BOTTOMTOP) + " , RtoL=" + str(RIGHTLEFT) + " , LtoR=" + str(LEFTRIGHT))
+                        help="Mode direction : TtoB="+ str(DIRECTION_TOPBOTTOM) +" (default) , \
+                                               BtoT=" + str(DIRECTION_BOTTOMTOP) + " , \
+                                               RtoL=" + str(DIRECTION_RIGHTLEFT) + " , \
+                                               LtoR=" + str(DIRECTION_LEFTRIGHT))
+    parser.add_argument("-s", "--shapes",required=False, default=True, action='store_false',
+                        help="Do NOT care about shapes when active") #TODO shape
     parser.add_argument("-n", "--normalize",required=False, default=True, action='store_false',
                         help="Do NOT normalize the shapes when active") #TODO Normalize
     parser.add_argument("-f", "--factorize",required=False, default=True, action='store_false',
@@ -466,6 +478,8 @@ if __name__ == "__main__":
     argFactorize = args["factorize"]
     argMode = int(args["mode"])
     argDirection = int(args["direction"])
+    argShapes = int(args["shapes"])
+    printDebug(("Norm:",argNormalize," Facto:",argFactorize," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
 
     soundServer = initPyoServer() #TODO Stop server ????
 
@@ -476,7 +490,7 @@ if __name__ == "__main__":
     # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
-    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argNormalize, argFactorize)
+    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argShapes, argNormalize, argFactorize)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
