@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Main file for ArchiMusik, an image file music player."""
 
-
+##ISSUES
+#sound output and jack audio server:
+#######you need to set jack as output for pyo server
 #######export PYO_SERVER_AUDIO=jack
 
 ##FIXME
@@ -12,19 +14,21 @@
 ##TODO
 #start a bunch of thread; aka thread list
 #thread bunch number as arg
-#more sleep time (note time up) options (area based even for direc?)
-#add a contrast / thershold option
-
+#SEQMODE:more sleep time (note time up) options (area based even for direc?)
+#invert sound hight to area (add argument?)
+#MIDI/OSC control
 
 ##BRAINSTROM
 # play head a variable thickness to create a time gap in wich is possible to move the shapes ->sound effect
 # play head control from external device : kinect+hand / turntable / ....
 # install - des jumelles pour voir le paysage qui lisent le paysage .... (matthias singer)
 
-
 ##WHAT THE HECK
-#In directional mode, a note if played from in to out.
-#In sequence mode, FIXME
+#SYNTHES GENE
+#In directional mode, a note is played from shape entry to out and based on area.
+#In sequence mode, play each shape sequencienly, note based on area FIXME
+#MIDI/OSC control
+#...
 
 ## import the necessary packages
 ### python internals
@@ -81,30 +85,31 @@ class ThreadPlaySine(threading.Thread):
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, cnt, area, duration):
+    def __init__(self, cnt, freq, duration):
         threading.Thread.__init__(self)
         self.contour = cnt
-        self.area = area
+        self.frequency = freq
         self.duration = duration
 
     def run(self):
         # ~ area = cv2.contourArea(self.contour)
-        area = self.area
+        freq = self.frequency
         # ~ a = Sine(mul=0.01).out()
         lfo = Sine(1, 0, .1, .1)
         # add a bit of dissonance to left channel TODO rnd +/- ?
         bit_of_disso = 100
-        a = SineLoop(freq=[area,area+bit_of_disso],feedback=lfo,mul=0.1).out()
+        a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=0.1).out()
         time.sleep(self.duration)
 
 class ArchiMusik():
     """Explicit lyrics"""
-    def __init__(self, mode, direction, matchshape, normalize, factorize):
+    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize):
         self.mode = mode
         self.direction = direction
+        self.matchshape = matchshape
+        self.thershold = thershold
         self.normalize = normalize
         self.factorize = factorize
-        self.matchshape = matchshape
 
     def play(self):
         if self.mode == MODE_HEAD:
@@ -121,12 +126,12 @@ class ArchiMusik():
         else :
             self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
             self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
-            self.thresh = cv2.threshold(self.blurred, 60, 255, cv2.THRESH_BINARY)[1]
+            self.thresh = cv2.threshold(self.blurred, self.thershold, 255, cv2.THRESH_BINARY)[1]
             self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
 
     def findContours(self, normalize=None):
-        _, threshold = cv2.threshold(self.thresh, 240, 255, cv2.THRESH_BINARY)
-        _, self.contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # ~ _, threshold = cv2.threshold(self.thresh, 240, 255, cv2.THRESH_BINARY)
+        _, self.contours, _ = cv2.findContours(self.thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if (normalize != None):
             self.normalize = normalize
         if (self.normalize):
@@ -160,11 +165,11 @@ class ArchiMusik():
         for contour in self.contours:
             area = cv2.contourArea(contour)
             factorizedArea.append(int(area * factor))
-            # ~ if 'defDebug' in globals():
-                # ~ nonfactorizedArea.append(int(area))
+            if 'defDebug' in globals():
+                nonfactorizedArea.append(int(area))
 
-        # ~ printDebug (("AREA before factor: ",nonfactorizedArea))
-        # ~ printDebug (("AREA after factor: ",factorizedArea))
+        printDebug (("AREA before factor: ",nonfactorizedArea))
+        printDebug (("AREA after factor: ",factorizedArea))
 
         return factorizedArea
 
@@ -465,10 +470,12 @@ if __name__ == "__main__":
                                                LtoR=" + str(DIRECTION_LEFTRIGHT))
     parser.add_argument("-s", "--shapes",required=False, default=True, action='store_false',
                         help="Do NOT care about shapes when active") #TODO shape
+    parser.add_argument("-t", "--threshold",required=False, default=60,
+                        help="Threshold value for adjusting image result ([5-250] - default: 60)")
     parser.add_argument("-n", "--normalize",required=False, default=True, action='store_false',
-                        help="Do NOT normalize the shapes when active") #TODO Normalize
+                        help="Do NOT normalize the shapes when active")
     parser.add_argument("-f", "--factorize",required=False, default=True, action='store_false',
-                        help="Do NOT factorize the areas when active") #TODO facto
+                        help="Do NOT factorize the areas when active")
     parser.add_argument('-v', '--verbose', required=False,action='count', default=0,
                         help='Enable debug output (default: off)')
 
@@ -476,10 +483,11 @@ if __name__ == "__main__":
 
     argNormalize = args["normalize"]
     argFactorize = args["factorize"]
+    argThreshold = int(args["threshold"])
+    argShapes = int(args["shapes"])
     argMode = int(args["mode"])
     argDirection = int(args["direction"])
-    argShapes = int(args["shapes"])
-    printDebug(("Norm:",argNormalize," Facto:",argFactorize," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
+    printDebug(("Norm:",argNormalize," Facto:",argFactorize," Thres:",argThreshold," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
 
     soundServer = initPyoServer() #TODO Stop server ????
 
@@ -490,7 +498,7 @@ if __name__ == "__main__":
     # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
-    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argShapes, argNormalize, argFactorize)
+    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argShapes, argThreshold, argNormalize, argFactorize)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
