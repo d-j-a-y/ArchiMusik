@@ -10,6 +10,23 @@
 #less contours loop!
 #(DONE)area (aka frequency) is link to image size!
 #(HALFDONE)sleep time should be smarter ! FIXME : shape
+#invert/normaliz/factoriz/.... only working in head mode
+#largetohigh algo is hardcoded !!!
+
+# ~ MIDI note 	Frequency (Hz) 	Description
+# ~ 0	8.17578125 	Lowest organ note
+# ~ 12	16.3515625 	Lowest note for tuba, large pipe organs, Bösendorfer Imperial grand piano
+# ~ 24	32.703125 	Lowest C on a standard 88-key piano.
+# ~ 36	65.40625 	Lowest note for cello
+# ~ 48	130.8125 	Lowest note for viola, mandola
+# ~ 60	261.625 	Middle C
+# ~ 72	523.25 	C in middle of treble clef
+# ~ 84	1,046.5 	Approximately the highest note reproducible by the average female human voice.
+# ~ 96	2,093	Highest note for a flute.
+# ~ 108	4,186	Highest note on a standard 88-key piano.
+# ~ 120	8,372
+# ~ 132	16,744	Approximately the tone that a typical CRT television emits while running.
+
 
 ##TODO
 #start a bunch of thread; aka thread list
@@ -46,6 +63,8 @@ defDebug = True #FIXME (comment for no debug)
 REF307200=307200
 MAX88116=88116
 MIN103=103
+REFMAXAREA=20603
+REFMINAREA=109
 
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
@@ -54,6 +73,8 @@ DIRECTION_TOPBOTTOM=1
 DIRECTION_BOTTOMTOP=2
 DIRECTION_RIGHTLEFT=3
 DIRECTION_LEFTRIGHT=4
+
+THRESHOLD_DEFAULT=60
 
 SB_TOP =    0
 SB_BOTTOM = 1
@@ -68,31 +89,27 @@ ERROR = 0
 
 class ThreadPlaySine(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, cnt, area, duration):
+    def __init__(self, freq, duration):
         threading.Thread.__init__(self)
-        self.contour = cnt
-        self.area = area
+        self.frequency = freq
         self.duration = duration
         
     def run(self):
-        # ~ area = cv2.contourArea(self.contour)
-        area = self.area
+        freq = self.frequency
         # ~ a = Sine(mul=0.01).out()
         # add a bit of dissonance to left channel TODO rnd +/- ?
         bit_of_disso = 100
-        a = Sine(freq=[area,area+bit_of_disso], mul=0.3).out()
+        a = Sine(freq=[freq,freq+bit_of_disso], mul=0.3).out()
         time.sleep(self.duration)
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, cnt, freq, duration):
+    def __init__(self, freq, duration):
         threading.Thread.__init__(self)
-        self.contour = cnt
         self.frequency = freq
         self.duration = duration
 
     def run(self):
-        # ~ area = cv2.contourArea(self.contour)
         freq = self.frequency
         # ~ a = Sine(mul=0.01).out()
         lfo = Sine(1, 0, .1, .1)
@@ -103,13 +120,14 @@ class ThreadPlaySineLoop(threading.Thread):
 
 class ArchiMusik():
     """Explicit lyrics"""
-    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize):
+    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize, invertband):
         self.mode = mode
         self.direction = direction
         self.matchshape = matchshape
         self.thershold = thershold
         self.normalize = normalize
         self.factorize = factorize
+        self.invertband = invertband
 
     def play(self):
         if self.mode == MODE_HEAD:
@@ -137,9 +155,10 @@ class ArchiMusik():
         if (self.normalize):
             self.contours = self.normalizedContours() #FIXME less contours loop
         self.simplebounds = self.getSimpleBounds()
-        self.factorizedArea = self.getFactorizedArea ()
-        self.approxcontours = self.approxContours()
+        self.factorizedArea = self.getFactorizedArea (self.invertband)
+        # ~ self.approxcontours = self.approxContours() #NOT USED
 
+    ## remove higher and lower contours from reference image test set data.
     def normalizedContours(self):
         contoursNorm=[]
         imgArea = self.resolution[0]*self.resolution[1]
@@ -155,7 +174,8 @@ class ArchiMusik():
 
         return contoursNorm
 
-    def getFactorizedArea(self):
+    ## adjust area, to corresponding frequency band of test image set control. invert the band by default (big area to low freqencies)
+    def getFactorizedArea(self, invertband = True):
         factorizedArea = []
         nonfactorizedArea = []
         if(self.factorize == True):
@@ -164,9 +184,11 @@ class ArchiMusik():
             factor = 1
         for contour in self.contours:
             area = cv2.contourArea(contour)
-            factorizedArea.append(int(area * factor))
             if 'defDebug' in globals():
                 nonfactorizedArea.append(int(area))
+            if (invertband):
+                area = math.fabs(area-REFMAXAREA-REFMINAREA) #FIXME hard codec; will not work when not facto or normali
+            factorizedArea.append(int(area * factor))
 
         printDebug (("AREA before factor: ",nonfactorizedArea))
         printDebug (("AREA after factor: ",factorizedArea))
@@ -224,7 +246,7 @@ class ArchiMusik():
                     # ~ isCollision((x0, y0, x1-x0,1),())
                     if (sb[SB_TOP][SB_Y] == y0):
                         length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
                         th_playSine.start()
                     i+=1
 
@@ -244,7 +266,7 @@ class ArchiMusik():
                     # ~ isCollision((x0, y0, x1-x0,1),())
                     if (sb[SB_BOTTOM][SB_Y] == y0):
                         length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
                         th_playSine.start()
                     i+=1
 
@@ -264,7 +286,7 @@ class ArchiMusik():
                     # ~ isCollision((x0, y0, x1-x0,1),())
                     if (sb[SB_RIGHT][SB_X] == x0):
                         length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
                         th_playSine.start()
                     i+=1
 
@@ -284,7 +306,7 @@ class ArchiMusik():
                     # ~ isCollision((x0, y0, x1-x0,1),())
                     if (sb[SB_LEFT][SB_X] == x0):
                         length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                        th_playSine = ThreadPlaySineLoop(self.contours[i], self.factorizedArea[i], length*readSpeed)
+                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
                         th_playSine.start()
                     i+=1
 
@@ -323,11 +345,11 @@ def printError (data):
         # ~ f.play()
 
 def playSine (contour):
-    area = cv2.contourArea(contour)
+    freq = cv2.contourArea(contour)
     # ~ a = Sine(mul=0.01).out()
     # add a bit of dissonance to left channel TODO rnd +/- ?
     bit_of_disso = 100
-    a = Sine(freq=[area, area+bit_of_disso], mul=0.3).out()#FIXME area aka freq
+    a = Sine(freq=[freq, freq+bit_of_disso], mul=0.3).out()#FIXME area aka freq
     soundServer.start()
     time.sleep(.3)#FIXME smrater sleep
     soundServer.stop()
@@ -459,28 +481,32 @@ if __name__ == "__main__":
                                               ArchMusik is an image music player for architecture elements.\n\n \
                                               Play the sound of the partition found in the image. \n \
                                               Basic sinusoïd, (tocome) midi/osc/vdmx messages.')
-    parser.add_argument("-i", "--image",    required=True,
+    parser.add_argument("-i", "--image",        required=True,
                         help="Path to the input image")
-    parser.add_argument("-m", "--mode",     required=False, default=MODE_HEAD,
+    parser.add_argument("-m", "--mode",         required=False,         default=MODE_HEAD,
                         help="Play mode : Head="+str(MODE_HEAD)+" (default) , Sequence="+str(MODE_SEQUENCE)+"")
-    parser.add_argument("-d", "--direction",required=False, default=DIRECTION_TOPBOTTOM,
+    parser.add_argument("-d", "--direction",    required=False, default=DIRECTION_TOPBOTTOM,
                         help="Mode direction : TtoB="+ str(DIRECTION_TOPBOTTOM) +" (default) , \
                                                BtoT=" + str(DIRECTION_BOTTOMTOP) + " , \
                                                RtoL=" + str(DIRECTION_RIGHTLEFT) + " , \
                                                LtoR=" + str(DIRECTION_LEFTRIGHT))
-    parser.add_argument("-s", "--shapes",required=False, default=True, action='store_false',
+    parser.add_argument("-s", "--shapes",       required=False,         default=True,   action='store_false',
                         help="Do NOT care about shapes when active") #TODO shape
-    parser.add_argument("-t", "--threshold",required=False, default=60,
-                        help="Threshold value for adjusting image result ([5-250] - default: 60)")
-    parser.add_argument("-n", "--normalize",required=False, default=True, action='store_false',
+    parser.add_argument("-t", "--threshold",    required=False,         default=THRESHOLD_DEFAULT,
+                        help="Threshold value for adjusting image result ([5-250] - default: "+str(THRESHOLD_DEFAULT)+")")
+    parser.add_argument("-n", "--normalize",    required=False,         default=True,   action='store_false',
                         help="Do NOT normalize the shapes when active")
-    parser.add_argument("-f", "--factorize",required=False, default=True, action='store_false',
+    parser.add_argument("-f", "--factorize",    required=False,         default=True,   action='store_false',
                         help="Do NOT factorize the areas when active")
-    parser.add_argument('-v', '--verbose', required=False,action='count', default=0,
+    parser.add_argument("-b", "--largetohigh",  required=False,         default=True,   action='store_false',
+                        help="Large areas produce hight frequencies sound")
+    parser.add_argument('-v', '--verbose',      required=False,         default=0,      action='count',
                         help='Enable debug output (default: off)')
+
 
     args = vars(parser.parse_args())
 
+    argInvertband = args["largetohigh"]
     argNormalize = args["normalize"]
     argFactorize = args["factorize"]
     argThreshold = int(args["threshold"])
@@ -498,7 +524,7 @@ if __name__ == "__main__":
     # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
-    archiMusik = ArchiMusik(int(args["mode"]), int(args["direction"]), argShapes, argThreshold, argNormalize, argFactorize)
+    archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
