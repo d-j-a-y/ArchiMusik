@@ -87,6 +87,12 @@ SB_Y=1
 NO_ERROR = 1
 ERROR = 0
 
+class AMAudioConfig():
+    """Helper to conf.ig audio - pyo"""
+    def __init__(self):
+        self.outdevice = ""
+        self.outdevicename = ""
+
 class ThreadPlaySine(threading.Thread):
     """thread object for playing Sine"""
     def __init__(self, freq, duration):
@@ -115,7 +121,9 @@ class ThreadPlaySineLoop(threading.Thread):
         lfo = Sine(1, 0, .1, .1)
         # add a bit of dissonance to left channel TODO rnd +/- ?
         bit_of_disso = 100
-        a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=0.1).out()
+        f = Fader(fadein=0.1, fadeout=0.1, dur=0, mul=.2)
+        a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=f.play()).out()
+        # ~ a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=0.1).out()
         time.sleep(self.duration)
 
 class ArchiMusik():
@@ -439,10 +447,54 @@ def contoursLoop(contours):
 
     cv2.destroyAllWindows() 
 
-def initPyoServer():
-    s = Server().boot()
+def initPyoServer(pyoconfig):
+    s = Server(audio=pyoconfig.outdevicename, sr=48000,jackname="archimusik", duplex=0) #only output by default
+    s.setOutputDevice(pyoconfig.outdevice)
+    s.boot()
     return s
 
+
+def configPyoServer():
+    printDebug(pa_get_version_text())
+    print("Choose a host (aka sound card) from the list:")
+    pa_list_host_apis()
+
+#    pa_list_devices()
+
+    if  withJack() :
+        print("JACK [OK] : Pyo Sound server is built with jack support")
+    else:
+        print("JACK [KO] : Pyo Sound server do not support jack")
+
+    print("Choose an output device from the list:")
+    outdev, index = pa_get_output_devices()
+    index_def = pa_get_default_output()
+    for i in index :
+        default_str = ""
+        if (i == index_def) :
+            default_str= "**default**"
+        print (i,"\t:",outdev[i],default_str)
+    pyodevice = None
+    while pyodevice == None :
+        try:
+           pyodevice = int(input("index:"))
+        except ValueError:
+            print("you shoud try with an index!")
+            pyodevice = None
+            pass
+            continue
+
+        if (pyodevice not in index) :
+            print("index out of bound... are you crazy??!")
+            pyodevice = None
+
+    print (outdev[pyodevice],"!!!!!")
+
+    pyconfig = AMAudioConfig()
+    pyconfig.outdevice = pyodevice
+    pyconfig.outdevicename = outdev[pyodevice]
+
+    return pyconfig
 
 # ~ def shape2 ():
     # ~ # find contours in the thresholded image
@@ -499,13 +551,20 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--factorize",    required=False,         default=True,   action='store_false',
                         help="Do NOT factorize the areas when active")
     parser.add_argument("-b", "--largetohigh",  required=False,         default=True,   action='store_false',
-                        help="Large areas produce hight frequencies sound")
+                        help="Large areas produce high frequencies sound")
+    parser.add_argument("-a", "--audioconfig",  required=False,         default=False,   action='store_true',
+                        help="Interactive audio setup, try that if mute ;-) - (generate also \
+                        the argument for passing to -y/--pyoconfig)")
+    parser.add_argument("-y", "--pyoconfig",  required=False,         default="",
+                        help="Set config for Pyo audio server (see -a/--audioconfig)")
     parser.add_argument('-v', '--verbose',      required=False,         default=0,      action='count',
                         help='Enable debug output (default: off)')
 
 
     args = vars(parser.parse_args())
 
+    argAudioconfig = args["audioconfig"]
+    argPyoconfig = args["pyoconfig"]
     argInvertband = args["largetohigh"]
     argNormalize = args["normalize"]
     argFactorize = args["factorize"]
@@ -513,9 +572,14 @@ if __name__ == "__main__":
     argShapes = int(args["shapes"])
     argMode = int(args["mode"])
     argDirection = int(args["direction"])
+    printDebug(("ARgument list:"))
     printDebug(("Norm:",argNormalize," Facto:",argFactorize," Thres:",argThreshold," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
+    printDebug(("Audioconfig:",argAudioconfig, " Pyoconfig:",argPyoconfig))
 
-    soundServer = initPyoServer() #TODO Stop server ????
+    pyoconfig = AMAudioConfig()
+    if(argAudioconfig):
+        pyoconfig = configPyoServer()
+    soundServer = initPyoServer(pyoconfig) #TODO Stop server ????
 
     # ~ # load the image, convert it to grayscale, blur it slightly,
     # ~ # and threshold it

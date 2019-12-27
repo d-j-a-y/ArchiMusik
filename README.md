@@ -45,6 +45,10 @@ optional arguments:
   -n, --normalize       Do NOT normalize the shapes when active
   -f, --factorize       Do NOT factorize the areas when active
   -b, --largetohigh     Large areas produce hight frequencies sound
+  -a, --audioconfig     Interactive audio setup - generate in the same time
+                        the command line argument for -y/--pyoconfig
+  -y PYOCONFIG, --pyoconfig PYOCONFIG
+                        Set config for Pyo audio server (see -a/--audioconfig)
   -v, --verbose         Enable debug output (default: off)
 ```
 
