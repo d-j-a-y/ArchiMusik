@@ -38,7 +38,13 @@ optional arguments:
   -d DIRECTION, --direction DIRECTION
                         Mode direction : TtoB=1 (default) , BtoT=2 , RtoL=3 ,
                         LtoR=4
+  -s, --shapes          Do NOT care about shapes when active
+  -t THRESHOLD, --threshold THRESHOLD
+                        Threshold value for adjusting image result ([5-250] -
+                        default: 60)
   -n, --normalize       Do NOT normalize the shapes when active
+  -f, --factorize       Do NOT factorize the areas when active
+  -b, --largetohigh     Large areas produce hight frequencies sound
   -v, --verbose         Enable debug output (default: off)
 ```
 
@@ -52,12 +58,16 @@ ___Important___ : Only tested with OpenCV 3.2
 
 * [OpenCV](http://opencv.org/), based on opencv 3.2
 * Python 3 bindings for the computer vision library (Debian Package: python3-opencv)
+* liblo OSC library (Debian Package: liblo-dev)
+* Python3 pip (Debian Package: python3-pip)
 
 ## Python3 packages
+* [Cython], The Cython compiler for writing C extensionsù<xw
+* [setuptools], setuptools
 * [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
 * [Numpy](https://numpy.org/), scientific computing.
 * [pyliblo](http://das.nasophon.de/pyliblo/), pyliblo is a Python wrapper for the liblo OSC library.
 
 ```
-/path/to/python3 -m pip install numpy pyo pyliblo --user --upgrade
+/path/to/python3 -m pip install setuptools numpy pyo pyliblo --user --upgrade
 ```
