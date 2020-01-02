@@ -69,6 +69,7 @@ REFMINAREA=109
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
 
+DIRECTION_UNKNOWN= -1
 DIRECTION_TOPBOTTOM=1
 DIRECTION_BOTTOMTOP=2
 DIRECTION_RIGHTLEFT=3
@@ -83,6 +84,12 @@ SB_LEFT =   3
 
 SB_X=0
 SB_Y=1
+
+# ~ SHAPE_TRIANGLE = 3
+# ~ SHAPE_RECTANGLE = 4
+# ~ SHAPE_PENTAGONE = 5
+# ~ SHAPE_ELLIPSE = 15
+# ~ SHAPE_CIRCLE = 16
 
 NO_ERROR = 1
 ERROR = 0
@@ -99,7 +106,7 @@ class ThreadPlaySine(threading.Thread):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
-        
+
     def run(self):
         freq = self.frequency
         # ~ a = Sine(mul=0.01).out()
@@ -126,45 +133,116 @@ class ThreadPlaySineLoop(threading.Thread):
         # ~ a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=0.1).out()
         time.sleep(self.duration)
 
-class ArchiMusik():
-    """Explicit lyrics"""
-    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize, invertband):
-        self.mode = mode
-        self.direction = direction
-        self.matchshape = matchshape
-        self.thershold = thershold
-        self.normalize = normalize
-        self.factorize = factorize
-        self.invertband = invertband
 
-    def play(self):
-        if self.mode == MODE_HEAD:
-            self.readHeadLoop()
-        elif self.mode == MODE_SEQUENCE:
-            contoursLoop(self.contours)
-
-    def loadImage(self, img):
-        # load the image, convert it to grayscale, blur it slightly,
-        # and threshold it
-        self.image = cv2.imread(img)
-        if (self.image is None):
-            raise ValueError('A very bad thing happened : can\'t load file : ' + img)
+class DirectionHelper():
+    """Helper class for direction factorization"""
+    def __init__(self, direction, rows, cols):
+        if (direction == DIRECTION_TOPBOTTOM):
+            self.direction  = direction
+            self.x0         = 0
+            self.y0         = 0
+            self.x1         = cols-1
+            self.y1         = 0
+            self.index      = rows
+            self.shapeENTRY = SB_TOP
+            self.shapeMIN   = SB_TOP
+            self.shapeMAX   = SB_BOTTOM
+            self.Axe        = SB_Y
+            self.readHead   = self.y0
+        elif (direction == DIRECTION_BOTTOMTOP):
+            self.direction  = direction
+            self.x0         = 0
+            self.y0         = rows-1
+            self.x1         = cols-1
+            self.y1         = rows-1
+            self.index      = rows
+            self.shapeENTRY = SB_BOTTOM
+            self.shapeMIN   = SB_TOP
+            self.shapeMAX   = SB_BOTTOM
+            self.Axe        = SB_Y
+            self.readHead   = self.y0
+        elif (direction == DIRECTION_LEFTRIGHT):
+            self.direction  = direction
+            self.x0         = cols-1
+            self.y0         = 0
+            self.x1         = cols-1
+            self.y1         = rows-1
+            self.index      = cols
+            self.shapeENTRY = SB_LEFT
+            self.shapeMIN   = SB_LEFT
+            self.shapeMAX   = SB_RIGHT
+            self.Axe        = SB_X
+            self.readHead   = self.x0
+        elif (direction == DIRECTION_RIGHTLEFT):
+            self.direction  = direction
+            self.x0         = 0
+            self.y0         = 0
+            self.x1         = 0
+            self.y1         = rows-1
+            self.index      = cols
+            self.shapeENTRY = SB_RIGHT
+            self.shapeMIN   = SB_LEFT
+            self.shapeMAX   = SB_RIGHT
+            self.Axe        = SB_X
+            self.readHead   = self.x0
         else :
-            self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-            self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
-            self.thresh = cv2.threshold(self.blurred, self.thershold, 255, cv2.THRESH_BINARY)[1]
-            self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
+            self.direction = DIRECTION_UNKNOWN
 
-    def findContours(self, normalize=None):
-        # ~ _, threshold = cv2.threshold(self.thresh, 240, 255, cv2.THRESH_BINARY)
-        _, self.contours, _ = cv2.findContours(self.thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        if (normalize != None):
-            self.normalize = normalize
-        if (self.normalize):
-            self.contours = self.normalizedContours() #FIXME less contours loop
-        self.simplebounds = self.getSimpleBounds()
-        self.factorizedArea = self.getFactorizedArea (self.invertband)
-        # ~ self.approxcontours = self.approxContours() #NOT USED
+    def next(self, current):
+        if (self.direction == DIRECTION_TOPBOTTOM):
+            self.y0 = self.y1 = self.readHead   = current
+        elif (self.direction == DIRECTION_BOTTOMTOP):
+            self.y0 = self.y1 = self.readHead   = (self.index - 1) - current
+        elif (self.direction == DIRECTION_LEFTRIGHT):
+            self.x0 = self.x1 = self.readHead   = current
+        elif (self.direction == DIRECTION_RIGHTLEFT):
+            self.x0 = self.x1 = self.readHead   = (self.index - 1) - current
+        else :
+            self.readHead = -1
+
+class ContoursHelper():
+    """Helper class for cv2 contours methods"""
+    def __init__(self, image_thresh):
+        self.resolution = (int(image_thresh.shape[1]), int(image_thresh.shape[0]))
+        _, self.contours, _ = cv2.findContours(image_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    def getContours(self):
+        return self.contours
+
+    def drawName(self, approx, image, x, y):
+        font = cv2.FONT_HERSHEY_COMPLEX
+        if len(approx) == 3:
+            cv2.putText(image, "Triangle", (x, y), font, 1, (0))
+        elif len(approx) == 4:
+            cv2.putText(image, "Rectangle", (x, y), font, 1, (0))
+        elif len(approx) == 5:
+            cv2.putText(image, "Pentagon", (x, y), font, 1, (0))
+        elif 6 < len(approx) < 15:
+            cv2.putText(image, "Ellipse", (x, y), font, 1, (0))
+        else:
+            cv2.putText(image, "Circle", (x, y), font, 1, (0))
+
+    def drawFourPoints(self, simpleBound, thresh):
+        x = simpleBound[0][0]
+        y = simpleBound[0][1]
+        # ~ printDebug( ("topop : x " , x ," y ", y))
+        cv2.circle(thresh, (x, y), 3, (255,255,255))
+        x = simpleBound[1][0]
+        y = simpleBound[1][1]
+        # ~ printDebug( ("tottom : x " , x ," y ", y))
+        cv2.circle(thresh, (x, y), 3, (255,255,255))
+        cv2.circle(thresh, simpleBound[2], 3, (255,255,255))
+        cv2.circle(thresh, simpleBound[3], 3, (255,255,255))
+
+    def approxContour(self, cnt):
+        approx = (cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True))
+        return approx
+
+    def approxContours(self):
+        approx=[]
+        for cnt in self.contours:
+            approx.append (self.approxContour(cnt))
+        return approx
 
     ## remove higher and lower contours from reference image test set data.
     def normalizedContours(self):
@@ -180,13 +258,14 @@ class ArchiMusik():
             if ((area <= maxArea) & (area >= minArea)): #FIXME area aka freq  #TODO Normalize
                 contoursNorm.append(contour)
 
-        return contoursNorm
+        self.contours = contoursNorm
+        # ~ return contoursNorm
 
     ## adjust area, to corresponding frequency band of test image set control. invert the band by default (big area to low freqencies)
-    def getFactorizedArea(self, invertband = True):
+    def getFactorizedArea(self, factorize, invertband = True):
         factorizedArea = []
         nonfactorizedArea = []
-        if(self.factorize == True):
+        if(factorize == True):
             factor = (REF307200/(self.resolution[0]*self.resolution[1]))
         else:
             factor = 1
@@ -216,17 +295,47 @@ class ArchiMusik():
             simpleBounds.append(self.getSimpleBound(cnt))
         return simpleBounds
 
-    def approxContour(self, cnt):
-        approx = (cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True))
-        return approx
+class ArchiMusik():
+    """Explicit lyrics"""
+    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize, invertband):
+        self.mode = mode
+        self.direction = direction
+        self.matchshape = matchshape
+        self.thershold = thershold
+        self.normalize = normalize
+        self.factorize = factorize
+        self.invertband = invertband
 
-    def approxContours(self):
-        approx=[]
-        for cnt in self.contours:
-            approx.append (approxContour(cnt))
-        return approx
+    def play(self):
+        if self.mode == MODE_HEAD:
+            self.LoopReadHead()
+        elif self.mode == MODE_SEQUENCE:
+            self.LoopSequence()
 
-    def readHeadLoop (self):
+    def loadImage(self, img):
+        # load the image, convert it to grayscale, blur it slightly,
+        # and threshold it
+        self.image = cv2.imread(img)
+        if (self.image is None):
+            raise ValueError('A very bad thing happened : can\'t load file : ' + img)
+        else :
+            self.gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+            self.blurred = cv2.GaussianBlur(self.gray, (5, 5), 0)
+            self.thresh = cv2.threshold(self.blurred, self.thershold, 255, cv2.THRESH_BINARY)[1]
+            self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
+
+    def findContours(self, normalize=None):
+        self.contoursHelper = ContoursHelper(self.thresh)
+        if (normalize != None):
+            self.normalize = normalize
+        if (self.normalize):
+            self.contoursHelper.normalizedContours() #FIXME less contours loop
+        self.simpleBounds = self.contoursHelper.getSimpleBounds()
+        self.factorizedArea = self.contoursHelper.getFactorizedArea (self.factorize, self.invertband)
+        self.approxContours = self.contoursHelper.approxContours()
+
+
+    def LoopReadHead (self):
         rows,cols = self.thresh.shape[:2]
         readSpeed = .05
 
@@ -241,88 +350,58 @@ class ArchiMusik():
 
         soundServer.start()
 
-        if (self.direction == DIRECTION_TOPBOTTOM):
-            x0 = 0
-            y0 = 0
-            x1 = cols-1
-            y1 = 0
-            for row in range(rows):
-                readheadImg = readHeadDraw((x0,y0), (x1,y1))
-                i = 0
-                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-                for sb in self.simplebounds:
-                    # ~ isCollision((x0, y0, x1-x0,1),())
-                    if (sb[SB_TOP][SB_Y] == y0):
-                        length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
-                        th_playSine.start()
-                    i+=1
+        dh = DirectionHelper(self.direction, rows, cols)
+        for readhead_position in range(dh.index):
+            readheadImg = readHeadDraw((dh.x0,dh.y0), (dh.x1,dh.y1))
+            i = 0
+            # ~ printDebug (("x0y0 x1y1", (dh.x0,dh.y0), (dh.x1,dh.y1)))
+            for sb in self.simpleBounds:
+                # ~ isCollision((x0, y0, x1-x0,1),())
+                if (sb[dh.shapeENTRY][dh.Axe] == dh.readHead):
+                    # ~ Yes!!!! Let's do something with that now!
 
-                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
-                y0 = y1 = row
-                time.sleep(readSpeed)
-        elif (self.direction == DIRECTION_BOTTOMTOP):
-            x0 = 0
-            y0 = rows-1
-            x1 = cols-1
-            y1 = rows-1
-            for row in range(rows):
-                readheadImg = readHeadDraw((x0,y0), (x1,y1))
-                i = 0
-                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-                for sb in self.simplebounds:
-                    # ~ isCollision((x0, y0, x1-x0,1),())
-                    if (sb[SB_BOTTOM][SB_Y] == y0):
-                        length = sb[SB_BOTTOM][SB_Y] - sb[SB_TOP][SB_Y]
-                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
-                        th_playSine.start()
-                    i+=1
+                    cv2.drawContours(self.thresh, [self.approxContours[i]], 0, (80,80,80), 5)
+                    x = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
+                    self.contoursHelper.drawName(self.approxContours[i], self.thresh, x, dh.y0)
+                    self.contoursHelper.drawFourPoints(sb, self.thresh)
 
-                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
-                y0 = y1 = (rows-1)-row
-                time.sleep(readSpeed)
-        elif (self.direction == DIRECTION_RIGHTLEFT):
-            x0 = cols-1
-            y0 = 0
-            x1 = cols-1
-            y1 = rows-1
-            for col in range(cols):
-                readheadImg = readHeadDraw((x0,y0), (x1,y1))
-                i = 0
-                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-                for sb in self.simplebounds:
-                    # ~ isCollision((x0, y0, x1-x0,1),())
-                    if (sb[SB_RIGHT][SB_X] == x0):
-                        length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
-                        th_playSine.start()
-                    i+=1
+                    length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
+                    th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
+                    th_playSine.start()
+                i+=1
 
-                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
-                x0 = x1 = (cols-1)-col
-                time.sleep(readSpeed)
-        elif (self.direction == DIRECTION_LEFTRIGHT):
-            x0 = 0
-            y0 = 0
-            x1 = 0
-            y1 = rows-1
-            for col in range(cols):
-                readheadImg = readHeadDraw((x0,y0), (x1,y1))
-                i = 0
-                # ~ printDebug (("x0y0 x1y1", (x0,y0), (x1,y1)))
-                for sb in self.simplebounds:
-                    # ~ isCollision((x0, y0, x1-x0,1),())
-                    if (sb[SB_LEFT][SB_X] == x0):
-                        length = sb[SB_RIGHT][SB_X] - sb[SB_LEFT][SB_X]
-                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
-                        th_playSine.start()
-                    i+=1
-
-                cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
-                x0 = x1 = col
-                time.sleep(readSpeed)
+            cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+            dh.next(readhead_position)
+            time.sleep(readSpeed)
 
         soundServer.stop()
+
+
+    def LoopSequence(self):
+        # ~ contours = self.contoursHelper.getContours()
+
+        cv2.imshow("ARchiMusik", self.thresh)
+
+        # ~ for cnt in contours:
+            #normalize cnt, remove smaller areas 1/100 of image area frequence bound (FIXME 100 / 1500),
+            # ~ retval = cv2.contourArxea( cnt)
+        i = 0
+        for approx in self.approxContours:
+            # ~ approx = approxContour(cnt)
+            cv2.drawContours(self.thresh, [approx], 0, (0), 5)
+
+            self.contoursHelper.drawName(approx, self.thresh, approx.ravel()[0], approx.ravel()[1])
+
+            simpleBound = self.simpleBounds[i]
+
+            self.contoursHelper.drawFourPoints(self.simpleBounds[i], self.thresh)
+
+            cv2.imshow("ARchiMusik", self.thresh)
+
+            playSine(approx)
+            i = i + 1
+
+        cv2.destroyAllWindows()
 
 def exitme(code=0):
     sys.exit(code)
@@ -366,86 +445,15 @@ def playSine (contour):
 def readHeadDraw (startPos, endPos):
     if (False):#TODO full img white and ghost readHead
         readhead = np.full((archiMusik.image.shape[0],archiMusik.image.shape[1]), 255, np.uint8) #FIXME clean the image in place of create a new one
-        cv2.line(readhead, startPos, endPos, (0,255,255), 2) 
+        cv2.line(readhead, startPos, endPos, (0,255,255), 2)
 
     if (True): # img thre + readhead white
         readhead = np.full((archiMusik.image.shape[0],archiMusik.image.shape[1]), 0, np.uint8) #FIXME clean the image in place of create a new one
         cv2.line(readhead, startPos, endPos, (255,255,255), 2)
     return readhead
 
-def isCollision (a, b): # (x,y,width,height)
-  return ((abs(a[0] - b[0]) * 2 < (a[2] + b[2])) & (abs(a[1] - b[1]) * 2 < (a[3] + b[3])))
-
-def approxContour(cnt):
-    approx = (cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True))
-    # ~ printDebug (approx)
-    return approx
-
-def approxContours(contours):
-    approx=[]
-    for cnt in contours:
-        approx.append (approxContour(cnt))
-    # ~ printDebug (approx)
-    return approx
-
-def getSimpleBound(cnt):
-    top = tuple(cnt[cnt[:,:,1].argmin()][0])
-    bottom = tuple(cnt[cnt[:,:,1].argmax()][0])
-    right = tuple(cnt[cnt[:,:,0].argmax()][0])
-    left = tuple(cnt[cnt[:,:,0].argmin()][0])
-    return (top, bottom, right, left)
-
-def getSimpleBounds(contours):
-    simpleBounds = []
-    for cnt in contours:
-        # ~ sb = getSimpleBound (cnt)
-        # ~ printDebug (sb)
-        # ~ simpleBounds.append(sb)
-        simpleBounds.append(getSimpleBound(cnt))
-    return simpleBounds
-
-def contoursLoop(contours):
-    font = cv2.FONT_HERSHEY_COMPLEX
-
-    cv2.imshow("ARchiMusik", archiMusik.thresh)
-
-    # ~ for cnt in contours:
-        #normalize cnt, remove smaller areas 1/100 of image area frequence bound (FIXME 100 / 1500), 
-        # ~ retval = cv2.contourArxea( cnt)
-
-    for cnt in contours:
-        approx = approxContour(cnt)
-        cv2.drawContours(archiMusik.thresh, [approx], 0, (0), 5)
-        x = approx.ravel()[0]
-        y = approx.ravel()[1]
-        if len(approx) == 3:
-            cv2.putText(archiMusik.thresh, "Triangle", (x, y), font, 1, (0))
-        elif len(approx) == 4:
-            cv2.putText(archiMusik.thresh, "Rectangle", (x, y), font, 1, (0))
-        elif len(approx) == 5:
-            cv2.putText(archiMusik.thresh, "Pentagon", (x, y), font, 1, (0))
-        elif 6 < len(approx) < 15:
-            cv2.putText(archiMusik.thresh, "Ellipse", (x, y), font, 1, (0))
-        else:
-            cv2.putText(archiMusik.thresh, "Circle", (x, y), font, 1, (0))
-
-        simpleBound = getSimpleBound(cnt)
-        x = simpleBound[0][0]
-        y = simpleBound[0][1]
-        printDebug( ("topop : x " , x ," y ", y))
-        cv2.circle(archiMusik.thresh, (x, y), 3, (255,255,255))
-        x = simpleBound[1][0]
-        y = simpleBound[1][1]
-        printDebug( ("tottom : x " , x ," y ", y))
-        cv2.circle(archiMusik.thresh, (x, y), 3, (255,255,255))
-        cv2.circle(archiMusik.thresh, simpleBound[2], 3, (255,255,255))
-        cv2.circle(archiMusik.thresh, simpleBound[3], 3, (255,255,255))
-
-        cv2.imshow("ARchiMusik", archiMusik.thresh)
-
-        playSine(cnt)
-
-    cv2.destroyAllWindows() 
+# ~ def isCollision (a, b): # (x,y,width,height)
+  # ~ return ((abs(a[0] - b[0]) * 2 < (a[2] + b[2])) & (abs(a[1] - b[1]) * 2 < (a[3] + b[3])))
 
 def initPyoServer(pyoconfig):
     s = Server(audio=pyoconfig.outdevicename, sr=48000,jackname="archimusik", duplex=0) #only output by default
@@ -508,13 +516,13 @@ def configPyoServer():
         # ~ M = cv2.moments(c)
         # ~ cX = int(M["m10"] / M["m00"])
         # ~ cY = int(M["m01"] / M["m00"])
-     
+
         # ~ # draw the contour and center of the shape on the image
         # ~ cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
         # ~ cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
         # ~ cv2.putText(image, "center", (cX - 20, cY - 20),
             # ~ cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-     
+
         # ~ # show the image
         # ~ cv2.imshow("Image", image)
         # ~ cv2.waitKey(0)
