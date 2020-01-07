@@ -60,11 +60,17 @@ from pyo import *
 
 defDebug = True #FIXME (comment for no debug)
 
+AUDIOCONFIG = 488
+MIDICONFIG  = 124
+
 REF307200=307200
 MAX88116=88116
 MIN103=103
 REFMAXAREA=20603
 REFMINAREA=109
+
+REFMINMIDINOTE=36
+REFMAXMIDINOTE=96
 
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
@@ -96,7 +102,8 @@ ERROR = 0
 
 class AMAudioConfig():
     """Helper to conf.ig audio - pyo"""
-    def __init__(self):
+    def __init__(self, config):
+        self.type = config
         self.outdevice = ""
         self.outdevicename = ""
 
@@ -133,6 +140,25 @@ class ThreadPlaySineLoop(threading.Thread):
         # ~ a = SineLoop(freq=[freq,freq+bit_of_disso],feedback=lfo,mul=0.1).out()
         time.sleep(self.duration)
 
+class ThreadPlayMidiNote(threading.Thread):
+    """thread object for playing Sine"""
+    def __init__(self, freq, duration, pyoserver):
+        threading.Thread.__init__(self)
+        self.frequency = freq
+        self.duration = duration
+        self.pyoserver = pyoserver
+
+    def run(self):
+        freq = self.frequency
+
+        pitch = int(REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/MAX88116)
+        printDebug (("avant minmax :" ,self.duration, "-->", pitch))
+        pitch = max(min (127,pitch), 0)
+        # ~ pitch = Phasor(freq=11, mul=48, add=36)
+        # ~ pit = int(pitch.get())
+        printDebug (("apres minmax :" , self.duration, "-->", pitch))
+
+        self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000))
 
 class DirectionHelper():
     """Helper class for direction factorization"""
@@ -187,6 +213,22 @@ class DirectionHelper():
             self.readHead   = self.x0
         else :
             self.direction = DIRECTION_UNKNOWN
+
+    def getTextCoord(self, sb):
+        if (self.direction == DIRECTION_TOPBOTTOM):
+            self.textX = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
+            self.textY = self.y0
+        elif (self.direction == DIRECTION_BOTTOMTOP):
+            self.textX = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
+            self.textY = self.y0
+        elif (self.direction == DIRECTION_LEFTRIGHT):
+            self.textX = self.x0
+            self.textY = int((sb[SB_TOP][SB_Y] + sb[SB_BOTTOM][SB_Y])/2)
+        elif (self.direction == DIRECTION_RIGHTLEFT):
+            self.textX = self.x0
+            self.textY = int((sb[SB_TOP][SB_Y] + sb[SB_BOTTOM][SB_Y])/2)
+        else :
+            self.readHead = -1
 
     def next(self, current):
         if (self.direction == DIRECTION_TOPBOTTOM):
@@ -269,12 +311,13 @@ class ContoursHelper():
             factor = (REF307200/(self.resolution[0]*self.resolution[1]))
         else:
             factor = 1
+
         for contour in self.contours:
             area = cv2.contourArea(contour)
             if 'defDebug' in globals():
                 nonfactorizedArea.append(int(area))
             if (invertband):
-                area = math.fabs(area-REFMAXAREA-REFMINAREA) #FIXME hard codec; will not work when not facto or normali
+                area = math.fabs(area-(MAX88116/factor)-(MIN103/factor)) #FIXME hard codec; will not work when not facto or normali
             factorizedArea.append(int(area * factor))
 
         printDebug (("AREA before factor: ",nonfactorizedArea))
@@ -306,7 +349,8 @@ class ArchiMusik():
         self.factorize = factorize
         self.invertband = invertband
 
-    def play(self):
+    def play(self, typeaudio):
+        self.output = typeaudio
         if self.mode == MODE_HEAD:
             self.LoopReadHead()
         elif self.mode == MODE_SEQUENCE:
@@ -349,6 +393,8 @@ class ArchiMusik():
         # ~ printDebug (len(simpleBounds))
 
         soundServer.start()
+        
+        # ~ maclass = if (MIDI) 
 
         dh = DirectionHelper(self.direction, rows, cols)
         for readhead_position in range(dh.index):
@@ -361,12 +407,17 @@ class ArchiMusik():
                     # ~ Yes!!!! Let's do something with that now!
 
                     cv2.drawContours(self.thresh, [self.approxContours[i]], 0, (80,80,80), 5)
-                    x = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
-                    self.contoursHelper.drawName(self.approxContours[i], self.thresh, x, dh.y0)
+                    # ~ x = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
+                    dh.getTextCoord(sb)
+                    self.contoursHelper.drawName(self.approxContours[i], self.thresh, dh.textX, dh.textY)
                     self.contoursHelper.drawFourPoints(sb, self.thresh)
 
                     length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
-                    th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
+                    # ~ maclass.play()
+                    if (self.output == AUDIOCONFIG):
+                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
+                    elif (self.output == MIDICONFIG):
+                        th_playSine = ThreadPlayMidiNote(self.factorizedArea[i], length*readSpeed, soundServer)
                     th_playSine.start()
                 i+=1
 
@@ -456,51 +507,93 @@ def readHeadDraw (startPos, endPos):
   # ~ return ((abs(a[0] - b[0]) * 2 < (a[2] + b[2])) & (abs(a[1] - b[1]) * 2 < (a[3] + b[3])))
 
 def initPyoServer(pyoconfig):
-    s = Server(audio=pyoconfig.outdevicename, sr=48000,jackname="archimusik", duplex=0) #only output by default
-    s.setOutputDevice(pyoconfig.outdevice)
+    s = None
+    if (pyoconfig.type == AUDIOCONFIG):
+        s = Server(audio=pyoconfig.outdevicename, sr=48000,jackname="archimusik", duplex=0) #only output by default
+        s.setOutputDevice(pyoconfig.outdevice)
+    elif (pyoconfig.type == MIDICONFIG):
+        s = Server(duplex=0)
+        s.setMidiOutputDevice(pyoconfig.outdevice)
+    else:
+        printError("sound server can not be started. can't resume....")
+        exitme()
+
     s.boot()
     return s
 
 
 def configPyoServer():
     printDebug(pa_get_version_text())
-    print("Choose a host (aka sound card) from the list:")
-    pa_list_host_apis()
 
-#    pa_list_devices()
+    midioutput = int(input("Choose Audio[0] or Midi[1]:"))
 
-    if  withJack() :
-        print("JACK [OK] : Pyo Sound server is built with jack support")
+    if (midioutput):
+        print("Choose a host (aka midi OUT) from the list:")
+        outdev, index = pm_get_output_devices()
+        i = 0
+        for midinput in outdev:
+            print (i, midinput)
+            i = i + 1
+
+        # ~ pm_list_devices()
+        pyodevice = None
+        while pyodevice == None :
+            try:
+               pyodevice = int(input("index:"))
+            except ValueError:
+                print("you shoud try with an index!")
+                pyodevice = None
+                pass
+                continue
+
+            if (pyodevice not in index) :
+                print("index out of bound... are you crazy??!")
+                pyodevice = None
+
+        print (outdev[pyodevice],"aka", index[pyodevice], "!!!!!")
+
+        pyconfig = AMAudioConfig(MIDICONFIG)
+        pyconfig.outdevice = index[pyodevice]
+        pyconfig.outdevicename = outdev[pyodevice]
+
     else:
-        print("JACK [KO] : Pyo Sound server do not support jack")
+        print("Choose a host (aka sound card) from the list:")
+        pa_list_host_apis()
 
-    print("Choose an output device from the list:")
-    outdev, index = pa_get_output_devices()
-    index_def = pa_get_default_output()
-    for i in index :
-        default_str = ""
-        if (i == index_def) :
-            default_str= "**default**"
-        print (i,"\t:",outdev[i],default_str)
-    pyodevice = None
-    while pyodevice == None :
-        try:
-           pyodevice = int(input("index:"))
-        except ValueError:
-            print("you shoud try with an index!")
-            pyodevice = None
-            pass
-            continue
+    #    pa_list_devices()
 
-        if (pyodevice not in index) :
-            print("index out of bound... are you crazy??!")
-            pyodevice = None
+        if  withJack() :
+            print("JACK [OK] : Pyo Sound server is built with jack support")
+        else:
+            print("JACK [KO] : Pyo Sound server do not support jack")
 
-    print (outdev[pyodevice],"!!!!!")
+        print("Choose an output device from the list:")
+        outdev, index = pa_get_output_devices()
+        index_def = pa_get_default_output()
+        for i in index :
+            default_str = ""
+            if (i == index_def) :
+                default_str= "**default**"
+            print (i,"\t:",outdev[i],default_str)
+        pyodevice = None
+        while pyodevice == None :
+            try:
+               pyodevice = int(input("index:"))
+            except ValueError:
+                print("you shoud try with an index!")
+                pyodevice = None
+                pass
+                continue
 
-    pyconfig = AMAudioConfig()
-    pyconfig.outdevice = pyodevice
-    pyconfig.outdevicename = outdev[pyodevice]
+            if (pyodevice not in index) :
+                print("index out of bound... are you crazy??!")
+                pyodevice = None
+
+        print (outdev[pyodevice],"!!!!!")
+
+        pyconfig = AMAudioConfig(AUDIOCONFIG)
+        pyconfig.outdevice = pyodevice
+        pyconfig.outdevicename = outdev[pyodevice]
 
     return pyconfig
 
@@ -561,7 +654,7 @@ if __name__ == "__main__":
     parser.add_argument("-b", "--largetohigh",  required=False,         default=True,   action='store_false',
                         help="Large areas produce high frequencies sound")
     parser.add_argument("-a", "--audioconfig",  required=False,         default=False,   action='store_true',
-                        help="Interactive audio setup, try that if mute ;-) - (generate also \
+                        help="Interactive audio/midi setup, try that if mute ;-) - (generate also \
                         the argument for passing to -y/--pyoconfig)")
     parser.add_argument("-y", "--pyoconfig",  required=False,         default="",
                         help="Set config for Pyo audio server (see -a/--audioconfig)")
@@ -584,7 +677,7 @@ if __name__ == "__main__":
     printDebug(("Norm:",argNormalize," Facto:",argFactorize," Thres:",argThreshold," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
     printDebug(("Audioconfig:",argAudioconfig, " Pyoconfig:",argPyoconfig))
 
-    pyoconfig = AMAudioConfig()
+    pyoconfig = AMAudioConfig(AUDIOCONFIG)
     if(argAudioconfig):
         pyoconfig = configPyoServer()
     soundServer = initPyoServer(pyoconfig) #TODO Stop server ????
@@ -653,4 +746,4 @@ if __name__ == "__main__":
 
     # ~ contours = normalizedContours(contours)
 
-    archiMusik.play()
+    archiMusik.play(pyoconfig.type)
