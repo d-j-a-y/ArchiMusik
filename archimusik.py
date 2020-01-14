@@ -102,14 +102,22 @@ ERROR = 0
 
 class AMAudioConfig():
     """Helper to conf.ig audio - pyo"""
+    outdevice = ""
+    outdevicename = ""
+
     def __init__(self, config):
         self.type = config
-        self.outdevice = ""
-        self.outdevicename = ""
+        # ~ self.outdevice = ""
+        # ~ self.outdevicename = ""
+
+class ThreadPlayFactory():
+   def create_tp(self, targetclass, freq, duration, pyosrv):
+      # ~ targetclass = typ.capitalize()
+      return globals()[targetclass](freq, duration, pyosrv)
 
 class ThreadPlaySine(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration):
+    def __init__(self, freq, duration, pyosrv):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
@@ -124,7 +132,7 @@ class ThreadPlaySine(threading.Thread):
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration):
+    def __init__(self, freq, duration, pyosrv):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
@@ -150,15 +158,34 @@ class ThreadPlayMidiNote(threading.Thread):
 
     def run(self):
         freq = self.frequency
-
-        pitch = int(REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/MAX88116)
-        printDebug (("avant minmax :" ,self.duration, "-->", pitch))
+        # FIXME 96 note is only MAX88116 area but should be btw max and a range...
+        pitch = int(REFMINMIDINOTE+(freq - MIN103 - ((MAX88116-MIN103)/128)) * (REFMAXMIDINOTE-REFMINMIDINOTE)/(MAX88116-MIN103))
+        printDebug ((freq, " avant minmax :" ,self.duration, "-->", pitch))
         pitch = max(min (127,pitch), 0)
         # ~ pitch = Phasor(freq=11, mul=48, add=36)
         # ~ pit = int(pitch.get())
         printDebug (("apres minmax :" , self.duration, "-->", pitch))
 
         self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000))
+
+
+# ~ class ThreadPlayMidiNote(threading.Thread):
+    # ~ """thread object for playing Midi note"""
+    # ~ def __init__(self, freq, duration, pyoserver):
+        # ~ threading.Thread.__init__(self)
+        # ~ self.frequency = freq
+        # ~ self.duration = duration
+        # ~ self.pyoserver = pyoserver
+
+    # ~ def run(self):
+        # ~ freq = self.frequency
+
+        # ~ pitch = int(REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/MAX88116) #FIXME should be done earlier / norma-facto
+        # ~ # # ~ pitch = Phasor(freq=11, mul=48, add=36)
+        # ~ # # ~ pit = int(pitch.get())
+        # ~ printDebug (("Midi note :", pitch, "-->" , self.duration,"s"))
+
+        # ~ self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000))
 
 class DirectionHelper():
     """Helper class for direction factorization"""
@@ -300,6 +327,7 @@ class ContoursHelper():
             if ((area <= maxArea) & (area >= minArea)): #FIXME area aka freq  #TODO Normalize
                 contoursNorm.append(contour)
 
+        # ~ printDebug (("normalizedContours: ",contoursNorm))
         self.contours = contoursNorm
         # ~ return contoursNorm
 
@@ -393,8 +421,13 @@ class ArchiMusik():
         # ~ printDebug (len(simpleBounds))
 
         soundServer.start()
-        
-        # ~ maclass = if (MIDI) 
+
+        tpFactory = ThreadPlayFactory()
+        tpType = ''
+        if (self.output == AUDIOCONFIG):
+            tpType = 'ThreadPlaySineLoop'
+        elif (self.output == MIDICONFIG):
+            tpType = 'ThreadPlayMidiNote'
 
         dh = DirectionHelper(self.direction, rows, cols)
         for readhead_position in range(dh.index):
@@ -407,18 +440,13 @@ class ArchiMusik():
                     # ~ Yes!!!! Let's do something with that now!
 
                     cv2.drawContours(self.thresh, [self.approxContours[i]], 0, (80,80,80), 5)
-                    # ~ x = int((sb[SB_RIGHT][SB_X] + sb[SB_LEFT][SB_X])/2)
                     dh.getTextCoord(sb)
                     self.contoursHelper.drawName(self.approxContours[i], self.thresh, dh.textX, dh.textY)
                     self.contoursHelper.drawFourPoints(sb, self.thresh)
 
                     length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
-                    # ~ maclass.play()
-                    if (self.output == AUDIOCONFIG):
-                        th_playSine = ThreadPlaySineLoop(self.factorizedArea[i], length*readSpeed)
-                    elif (self.output == MIDICONFIG):
-                        th_playSine = ThreadPlayMidiNote(self.factorizedArea[i], length*readSpeed, soundServer)
-                    th_playSine.start()
+
+                    tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer).start()
                 i+=1
 
             cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
@@ -437,6 +465,15 @@ class ArchiMusik():
             #normalize cnt, remove smaller areas 1/100 of image area frequence bound (FIXME 100 / 1500),
             # ~ retval = cv2.contourArxea( cnt)
         i = 0
+
+        # ~ tpFactory = ThreadPlayFactory()
+        # ~ tpType = ''
+        # ~ if (self.output == AUDIOCONFIG):
+            # ~ tpType = 'ThreadPlaySine'
+        # ~ elif (self.output == MIDICONFIG):
+            # ~ tpType = 'ThreadPlayMidiNote'
+
+
         for approx in self.approxContours:
             # ~ approx = approxContour(cnt)
             cv2.drawContours(self.thresh, [approx], 0, (0), 5)
@@ -448,6 +485,8 @@ class ArchiMusik():
             self.contoursHelper.drawFourPoints(self.simpleBounds[i], self.thresh)
 
             cv2.imshow("ARchiMusik", self.thresh)
+
+            # ~ tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer).start()
 
             playSine(approx)
             i = i + 1
