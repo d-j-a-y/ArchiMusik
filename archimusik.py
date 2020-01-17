@@ -2,9 +2,16 @@
 """Main file for ArchiMusik, an image file music player."""
 
 ##ISSUES
-#sound output and jack audio server:
+#FIXED sound output and jack audio server:
 #######you need to set jack as output for pyo server
-#######export PYO_SERVER_AUDIO=jack
+####### export PYO_SERVER_AUDIO=jack
+#sometime midi selection is out of bound ... ????
+#######ARE you crazy!
+#macosx opencv not display img
+###########https://stackoverflow.com/questions/44469973/python-opencv-3-2-imshow-no-image-content-with-waitkey0/44553641#44553641
+#DBUS-OpenCV / dbind-WARNING **: xx.xx.xx.xx: Couldn't register with accessibility bus: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
+##########https://bbs.archlinux.org/viewtopic.php?id=176663
+
 
 ##FIXME
 #less contours loop!
@@ -47,6 +54,10 @@
 #MIDI/OSC control
 #...
 
+
+##MIDI TEST
+##a2jmidi --> jack : baie de brass : a2j -> yohsimi : Midi through OUT  //// ou yohsimi en mode alsa en setup.
+
 ## import the necessary packages
 ### python internals
 import argparse
@@ -63,14 +74,15 @@ defDebug = True #FIXME (comment for no debug)
 AUDIOCONFIG = 488
 MIDICONFIG  = 124
 
-REF307200=307200
-MAX88116=88116
-MIN103=103
-REFMAXAREA=20603
-REFMINAREA=109
+REF307200=  307200
+MAX88116=   88116
+MIN103=     103
 
-REFMINMIDINOTE=36
+REFMAXAREA= 20603
+REFMINAREA= 109
+
 REFMAXMIDINOTE=96
+REFMINMIDINOTE=36
 
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
@@ -111,9 +123,9 @@ class AMAudioConfig():
         # ~ self.outdevicename = ""
 
 class ThreadPlayFactory():
-   def create_tp(self, targetclass, freq, duration, pyosrv):
+   def create_tp(self, targetclass, freq, duration, pyosrv, c):
       # ~ targetclass = typ.capitalize()
-      return globals()[targetclass](freq, duration, pyosrv)
+      return globals()[targetclass](freq, duration, pyosrv, c)
 
 class ThreadPlaySine(threading.Thread):
     """thread object for playing Sine"""
@@ -132,7 +144,7 @@ class ThreadPlaySine(threading.Thread):
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration, pyosrv):
+    def __init__(self, freq, duration, pyosrv, c):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
@@ -150,11 +162,12 @@ class ThreadPlaySineLoop(threading.Thread):
 
 class ThreadPlayMidiNote(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration, pyoserver):
+    def __init__(self, freq, duration, pyoserver, c):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
         self.pyoserver = pyoserver
+        self.c = c+1 # WTF ?! should be zer0 based! TODO :issue report on pyoserver : channel zero is not possible!
 
     def run(self):
         freq = self.frequency
@@ -164,9 +177,8 @@ class ThreadPlayMidiNote(threading.Thread):
         pitch = max(min (127,pitch), 0)
         # ~ pitch = Phasor(freq=11, mul=48, add=36)
         # ~ pit = int(pitch.get())
-        printDebug (("apres minmax :" , self.duration, "-->", pitch))
-
-        self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000))
+        printDebug (("apres minmax :" , self.duration, "-->", pitch, "c:", self.c))
+        self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000), channel=self.c)
 
 
 # ~ class ThreadPlayMidiNote(threading.Thread):
@@ -345,7 +357,7 @@ class ContoursHelper():
             if 'defDebug' in globals():
                 nonfactorizedArea.append(int(area))
             if (invertband):
-                area = math.fabs(area-(MAX88116/factor)-(MIN103/factor)) #FIXME hard codec; will not work when not facto or normali
+                area = math.fabs(area-(MAX88116/factor)-(MIN103/factor))
             factorizedArea.append(int(area * factor))
 
         printDebug (("AREA before factor: ",nonfactorizedArea))
@@ -430,6 +442,8 @@ class ArchiMusik():
             tpType = 'ThreadPlayMidiNote'
 
         dh = DirectionHelper(self.direction, rows, cols)
+        midiChannel = 0
+
         for readhead_position in range(dh.index):
             readheadImg = readHeadDraw((dh.x0,dh.y0), (dh.x1,dh.y1))
             i = 0
@@ -438,7 +452,6 @@ class ArchiMusik():
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[dh.shapeENTRY][dh.Axe] == dh.readHead):
                     # ~ Yes!!!! Let's do something with that now!
-
                     cv2.drawContours(self.thresh, [self.approxContours[i]], 0, (80,80,80), 5)
                     dh.getTextCoord(sb)
                     self.contoursHelper.drawName(self.approxContours[i], self.thresh, dh.textX, dh.textY)
@@ -446,7 +459,15 @@ class ArchiMusik():
 
                     length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
 
-                    tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer).start()
+                    # ~ Test code for MIDI channels / WTF Pyo? channel is zero based, check TPMidiNote channel+=1
+                    # ~ print (midiChannel)
+                    # ~ if (midiChannel == 0):
+                        # ~ midiChannel = 1
+                    # ~ else :
+                        # ~ midiChannel = 0
+
+                    tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer, midiChannel).start()
+
                 i+=1
 
             cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
