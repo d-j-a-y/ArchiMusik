@@ -58,20 +58,39 @@ for information about copyright and usage terms.
 Version [__Prototype__ | ~~Alpha~~ | ~~Beta~~ | ~~Released~~]
 
 # Dependencies
-___Important___ : Only tested with OpenCV 3.2
+___Important___ : Only support OpenCV 3.x
 
-* [OpenCV](http://opencv.org/), based on opencv 3.2
-* Python 3 bindings for the computer vision library (Debian Package: python3-opencv)
-* liblo OSC library (Debian Package: liblo-dev)
-* Python3 pip (Debian Package: python3-pip)
-
-## Python3 packages
-* [Cython], The Cython compiler for writing C extensionsù<xw
-* [setuptools], setuptools
-* [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
-* [Numpy](https://numpy.org/), scientific computing.
-* [pyliblo](http://das.nasophon.de/pyliblo/), pyliblo is a Python wrapper for the liblo OSC library.
+## Gnu/Linux
+* Python3
+* Python3 pip (Debian package: python3-pip)
+* [OpenCV](http://opencv.org/), based on opencv 3.x
+* Python3 bindings for the computer vision library (Debian package: python3-opencv)
 
 ```
-/path/to/python3 -m pip install setuptools numpy pyo pyliblo --user --upgrade
+sudo apt-get install python3-pip python3-opencv
+```
+
+### Python3 packages
+~~* [Cython], The Cython compiler for writing C extensions~~
+~~* [setuptools], setuptools~~
+* [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
+* [Numpy](https://numpy.org/), scientific computing.
+
+```
+/path/to/python3 -m pip install numpy pyo --user --upgrade
+```
+
+## Mac OsX
+
+* Python3 - www.python.org / install / mac
+* Python3 pip
+
+### Python3 packages
+
+* [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
+* [Numpy](https://numpy.org/), scientific computing.
+* [OpenCV v3.x for Python](https://opencv.org/)  (3.4.8.29 .... check current version on https://pypi.org/ )
+
+```
+/path/to/python3 -m pip install numpy pyo opencv-python==3.4.8.29 --user --upgrade
 ```
