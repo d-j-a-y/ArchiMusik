@@ -82,7 +82,7 @@ REFMAXAREA= 20603
 REFMINAREA= 109
 
 REFMAXMIDINOTE=96
-REFMINMIDINOTE=36
+REFMINMIDINOTE=36 #26?
 
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
@@ -144,7 +144,7 @@ class ThreadPlaySine(threading.Thread):
 
 class ThreadPlaySineLoop(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration, pyosrv, c):
+    def __init__(self, freq, duration, pyosrv, midichannel_notused):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
@@ -162,23 +162,21 @@ class ThreadPlaySineLoop(threading.Thread):
 
 class ThreadPlayMidiNote(threading.Thread):
     """thread object for playing Sine"""
-    def __init__(self, freq, duration, pyoserver, c):
+    def __init__(self, freq, duration, pyoserver, midichannel):
         threading.Thread.__init__(self)
         self.frequency = freq
         self.duration = duration
         self.pyoserver = pyoserver
-        self.c = c+1 # WTF ?! should be zer0 based! TODO :issue report on pyoserver : channel zero is not possible!
+        self.midichannel = midichannel+1 # WTF ?! should be zer0 based! TODO :issue report on pyoserver : channel zero is not possible!
 
     def run(self):
         freq = self.frequency
-        # FIXME 96 note is only MAX88116 area but should be btw max and a range...
-        pitch = int(REFMINMIDINOTE+(freq - MIN103 - ((MAX88116-MIN103)/128)) * (REFMAXMIDINOTE-REFMINMIDINOTE)/(MAX88116-MIN103))
-        printDebug ((freq, " avant minmax :" ,self.duration, "-->", pitch))
-        pitch = max(min (127,pitch), 0)
+        pitch = int( (REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/(MAX88116-MIN103)) + 0.5)
+        pitchMaxMin = max(min (127,pitch), 0)
         # ~ pitch = Phasor(freq=11, mul=48, add=36)
         # ~ pit = int(pitch.get())
-        printDebug (("apres minmax :" , self.duration, "-->", pitch, "c:", self.c))
-        self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000), channel=self.c)
+        printDebug (("Midi Mapping :" , self.duration, "-->", pitchMaxMin, '(',pitch,')', "channel:", self.midichannel))
+        self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000), channel=self.midichannel)
 
 
 # ~ class ThreadPlayMidiNote(threading.Thread):
