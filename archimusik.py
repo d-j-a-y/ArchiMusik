@@ -62,6 +62,7 @@
 ### python internals
 import argparse
 import threading
+from math import log
 
 ### externals
 # ~ import imutils
@@ -345,6 +346,7 @@ class ContoursHelper():
     def getFactorizedArea(self, factorize, invertband = True):
         factorizedArea = []
         nonfactorizedArea = []
+        self.soundArea = []
         if(factorize == True):
             factor = (REF307200/(self.resolution[0]*self.resolution[1]))
         else:
@@ -361,7 +363,28 @@ class ContoursHelper():
         printDebug (("AREA before factor: ",nonfactorizedArea))
         printDebug (("AREA after factor: ",factorizedArea))
 
+        self.soundArea = factorizedArea
         return factorizedArea
+
+    ## return a log scaling area tab, default log basis is 10
+    def getLogArea(self, scaletolog = True, logbasis = 10):
+        logArea = []
+        nonlogArea = []
+        logMax = log(MAX88116/MIN103, logbasis)
+        if(scaletolog == True):
+            for area in self.soundArea:
+                if 'defDebug' in globals():
+                    nonlogArea.append(area)
+                newarea = (MAX88116 * log(area / MIN103, logbasis)) / logMax
+                logArea.append(newarea)
+        else:
+            factor = 1
+
+        printDebug (("AREA before log: ",nonlogArea))
+        printDebug (("AREA after log: ",logArea))
+
+        self.soundArea = logArea
+        return logArea
 
     def getSimpleBound(self, cnt):
         top = tuple(cnt[cnt[:,:,1].argmin()][0])
@@ -378,7 +401,7 @@ class ContoursHelper():
 
 class ArchiMusik():
     """Explicit lyrics"""
-    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize, invertband):
+    def __init__(self, mode, direction, matchshape, thershold, normalize, factorize, invertband, scaletolog):
         self.mode = mode
         self.direction = direction
         self.matchshape = matchshape
@@ -386,6 +409,8 @@ class ArchiMusik():
         self.normalize = normalize
         self.factorize = factorize
         self.invertband = invertband
+        self.scaletolog = scaletolog
+        self.logbasis = 10
 
     def play(self, typeaudio):
         self.output = typeaudio
@@ -412,10 +437,12 @@ class ArchiMusik():
             self.normalize = normalize
         if (self.normalize):
             self.contoursHelper.normalizedContours() #FIXME less contours loop
+        #drawing data
         self.simpleBounds = self.contoursHelper.getSimpleBounds()
-        self.factorizedArea = self.contoursHelper.getFactorizedArea (self.factorize, self.invertband)
         self.approxContours = self.contoursHelper.approxContours()
-
+        #sound data
+        self.soundArea = self.contoursHelper.getFactorizedArea (self.factorize, self.invertband)
+        self.soundArea = self.contoursHelper.getLogArea (self.scaletolog, self.logbasis)
 
     def LoopReadHead (self):
         rows,cols = self.thresh.shape[:2]
@@ -450,21 +477,21 @@ class ArchiMusik():
                 # ~ isCollision((x0, y0, x1-x0,1),())
                 if (sb[dh.shapeENTRY][dh.Axe] == dh.readHead):
                     # ~ Yes!!!! Let's do something with that now!
+                    #self.drawsomething(i)
                     cv2.drawContours(self.thresh, [self.approxContours[i]], 0, (80,80,80), 5)
                     dh.getTextCoord(sb)
                     self.contoursHelper.drawName(self.approxContours[i], self.thresh, dh.textX, dh.textY)
                     self.contoursHelper.drawFourPoints(sb, self.thresh)
 
-                    length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
-
                     # ~ Test code for MIDI channels / WTF Pyo? channel is zero based, check TPMidiNote channel+=1
                     # ~ print (midiChannel)
-                    # ~ if (midiChannel == 0):
-                        # ~ midiChannel = 1
-                    # ~ else :
-                        # ~ midiChannel = 0
+                    if (midiChannel == 0):
+                        midiChannel = 1
+                    else :
+                        midiChannel = 0
 
-                    tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer, midiChannel).start()
+                    length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
+                    tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, soundServer, midiChannel).start()
 
                 i+=1
 
@@ -484,7 +511,7 @@ class ArchiMusik():
             #normalize cnt, remove smaller areas 1/100 of image area frequence bound (FIXME 100 / 1500),
             # ~ retval = cv2.contourArxea( cnt)
         i = 0
-
+        # FIXME
         # ~ tpFactory = ThreadPlayFactory()
         # ~ tpType = ''
         # ~ if (self.output == AUDIOCONFIG):
@@ -504,8 +531,8 @@ class ArchiMusik():
             self.contoursHelper.drawFourPoints(self.simpleBounds[i], self.thresh)
 
             cv2.imshow("ARchiMusik", self.thresh)
-
-            # ~ tpFactory.create_tp(tpType, self.factorizedArea[i], length*readSpeed, soundServer).start()
+            # FIXME !
+            # ~ tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, soundServer).start()
 
             playSine(approx)
             i = i + 1
@@ -727,6 +754,7 @@ if __name__ == "__main__":
     argInvertband = args["largetohigh"]
     argNormalize = args["normalize"]
     argFactorize = args["factorize"]
+    # ~ argFactorize = args["factorize"]
     argThreshold = int(args["threshold"])
     argShapes = int(args["shapes"])
     argMode = int(args["mode"])
@@ -747,7 +775,7 @@ if __name__ == "__main__":
     # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
-    archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband)
+    archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband, True)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
