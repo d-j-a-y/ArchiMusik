@@ -1,5 +1,32 @@
 #!/usr/bin/env python3
-"""Main file for ArchiMusik, an image file music player."""
+"""Main file for ArchiMusik, an image file music transcoder."""
+
+########################################################
+# ArchiMusik, an image to music transcoder
+# Copyright (C) 2019-20 Jérôme Blanchi aka d.j.a.y
+########################################################################
+# ArchiMusik is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+########################################################################
+
+##WHAT THE HECK?
+#Generative Synthesis
+#In playhead mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape area.
+#In sequential mode, play each shape sequencialy. The generation of the audio synthesis is based on the shape area.
+#MIDI control
+#In playhead mode, the MIDI control are sent during the travelof the play head. The MIDI note is based on the shape area.
+#In sequential mode, play each shape sequencialy. The MIDI note is based on the shape area.
+
 
 ##ISSUES
 #FIXED sound output and jack audio server:
@@ -12,7 +39,6 @@
 #DBUS-OpenCV / dbind-WARNING **: xx.xx.xx.xx: Couldn't register with accessibility bus: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
 ##########https://bbs.archlinux.org/viewtopic.php?id=176663
 
-
 ##FIXME
 #less contours loop!
 #(DONE)area (aka frequency) is link to image size!
@@ -20,43 +46,13 @@
 #invert/normaliz/factoriz/.... only working in head mode
 #largetohigh algo is hardcoded !!!
 
-# ~ MIDI note 	Frequency (Hz) 	Description
-# ~ 0	8.17578125 	Lowest organ note
-# ~ 12	16.3515625 	Lowest note for tuba, large pipe organs, Bösendorfer Imperial grand piano
-# ~ 24	32.703125 	Lowest C on a standard 88-key piano.
-# ~ 36	65.40625 	Lowest note for cello
-# ~ 48	130.8125 	Lowest note for viola, mandola
-# ~ 60	261.625 	Middle C
-# ~ 72	523.25 	C in middle of treble clef
-# ~ 84	1,046.5 	Approximately the highest note reproducible by the average female human voice.
-# ~ 96	2,093	Highest note for a flute.
-# ~ 108	4,186	Highest note on a standard 88-key piano.
-# ~ 120	8,372
-# ~ 132	16,744	Approximately the tone that a typical CRT television emits while running.
-
-
 ##TODO
-#start a bunch of thread; aka thread list
-#thread bunch number as arg
+#start a bunch of thread; aka thread list (thread bunch number as arg?)
 #SEQMODE:more sleep time (note time up) options (area based even for direc?)
-#invert sound hight to area (add argument?)
-#MIDI/OSC control
-
-##BRAINSTROM
-# play head a variable thickness to create a time gap in wich is possible to move the shapes ->sound effect
-# play head control from external device : kinect+hand / turntable / ....
-# install - des jumelles pour voir le paysage qui lisent le paysage .... (matthias singer)
-
-##WHAT THE HECK
-#SYNTHES GENE
-#In directional mode, a note is played from shape entry to out and based on area.
-#In sequence mode, play each shape sequencienly, note based on area FIXME
-#MIDI/OSC control
-#...
-
-
-##MIDI TEST
-##a2jmidi --> jack : baie de brass : a2j -> yohsimi : Midi through OUT  //// ou yohsimi en mode alsa en setup.
+#(DONE)invert sound hight to area (as argument)
+#MIDI(drafted)
+#OSC control
+#check error
 
 ## import the necessary packages
 ### python internals
@@ -82,8 +78,8 @@ MIN103=     103
 REFMAXAREA= 20603
 REFMINAREA= 109
 
-REFMAXMIDINOTE=96
-REFMINMIDINOTE=36 #26?
+REFMAXMIDINOTE=96 # ~ 108	4,186	Highest note on a standard 88-key piano.
+REFMINMIDINOTE=24 # ~ 24	32.703125 	Lowest C on a standard 88-key piano.
 
 MODE_HEAD =     1
 MODE_SEQUENCE = 2
@@ -115,13 +111,10 @@ ERROR = 0
 
 class AMAudioConfig():
     """Helper to conf.ig audio - pyo"""
-    outdevice = ""
-    outdevicename = ""
-
-    def __init__(self, config):
+    def __init__(self, config, device, devinename):
         self.type = config
-        # ~ self.outdevice = ""
-        # ~ self.outdevicename = ""
+        self.outdevice = device
+        self.outdevicename = devinename
 
 class ThreadPlayFactory():
    def create_tp(self, targetclass, freq, duration, pyosrv, c):
@@ -282,8 +275,8 @@ class DirectionHelper():
 
 class ContoursHelper():
     """Helper class for cv2 contours methods"""
-    def __init__(self, image_thresh):
-        self.resolution = (int(image_thresh.shape[1]), int(image_thresh.shape[0]))
+    def __init__(self, image_thresh, resolution):
+        self.resolution = resolution
         _, self.contours, _ = cv2.findContours(image_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     def getContours(self):
@@ -383,6 +376,31 @@ class ContoursHelper():
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
 
+        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
+        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
+        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
+        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
+
+        self.soundArea = logArea
+        return logArea
+
+    ## should return a inverse? of log scaling area tab, default log basis is 10
+    def getLogArea2(self, scaletolog = True, logbasis = 10):
+        logArea = []
+        nonlogArea = []
+        logMax = log(MAX88116/MIN103, logbasis)
+        if(scaletolog == True):
+            for area in self.soundArea:
+                if 'defDebug' in globals():
+                    nonlogArea.append(area)
+                newarea = (MIN103 * logbasis ** ((logMax * area) / MAX88116))
+                logArea.append(newarea)
+        else:
+            factor = 1
+
+        printDebug (("AREA before log: ",nonlogArea))
+        printDebug (("AREA after log: ",logArea))
+
         self.soundArea = logArea
         return logArea
 
@@ -410,7 +428,7 @@ class ArchiMusik():
         self.factorize = factorize
         self.invertband = invertband
         self.scaletolog = scaletolog
-        self.logbasis = 10
+        self.logbasis = 10 #FIXME has arg
 
     def play(self, typeaudio):
         self.output = typeaudio
@@ -421,7 +439,7 @@ class ArchiMusik():
 
     def loadImage(self, img):
         # load the image, convert it to grayscale, blur it slightly,
-        # and threshold it
+        # and threshold it by given value
         self.image = cv2.imread(img)
         if (self.image is None):
             raise ValueError('A very bad thing happened : can\'t load file : ' + img)
@@ -432,7 +450,7 @@ class ArchiMusik():
             self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
 
     def findContours(self, normalize=None):
-        self.contoursHelper = ContoursHelper(self.thresh)
+        self.contoursHelper = ContoursHelper(self.thresh, self.resolution)
         if (normalize != None):
             self.normalize = normalize
         if (self.normalize):
@@ -446,7 +464,7 @@ class ArchiMusik():
 
     def LoopReadHead (self):
         rows,cols = self.thresh.shape[:2]
-        readSpeed = .05
+        readSpeed = .05 #FIXME hardcoded
 
         if (False): #TEST single point TEST
             cnt = self.contours[1]
@@ -485,10 +503,7 @@ class ArchiMusik():
 
                     # ~ Test code for MIDI channels / WTF Pyo? channel is zero based, check TPMidiNote channel+=1
                     # ~ print (midiChannel)
-                    if (midiChannel == 0):
-                        midiChannel = 1
-                    else :
-                        midiChannel = 0
+                    midiChannel = not midiChannel
 
                     length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
                     tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, soundServer, midiChannel).start()
@@ -503,14 +518,8 @@ class ArchiMusik():
 
 
     def LoopSequence(self):
-        # ~ contours = self.contoursHelper.getContours()
-
         cv2.imshow("ARchiMusik", self.thresh)
 
-        # ~ for cnt in contours:
-            #normalize cnt, remove smaller areas 1/100 of image area frequence bound (FIXME 100 / 1500),
-            # ~ retval = cv2.contourArxea( cnt)
-        i = 0
         # FIXME
         # ~ tpFactory = ThreadPlayFactory()
         # ~ tpType = ''
@@ -519,7 +528,7 @@ class ArchiMusik():
         # ~ elif (self.output == MIDICONFIG):
             # ~ tpType = 'ThreadPlayMidiNote'
 
-
+        i = 0
         for approx in self.approxContours:
             # ~ approx = approxContour(cnt)
             cv2.drawContours(self.thresh, [approx], 0, (0), 5)
@@ -550,22 +559,6 @@ def printError (data):
     print ("***Fatal ERROR detected***\n------------------------------")
     print (data)
     print ("----------------------------------------\nProgram stop now")
-
-# ~ def playSineNotNormalized (contour):
-    # ~ area = cv2.contourArea(contour)
-    # ~ printDebug (area)
-
-    # ~ if ((int(area) < 1500) & (int(area) > 100)): #FIXME do a better Normalize!
-        #a = Sine(mul=0.01).out()
-        # ~ a = Sine(freq=area, mul=0.5).out()
-        # ~ soundServer.start()
-        # ~ time.sleep(.3)
-        # ~ soundServer.stop()
-        # ~ time.sleep(.1)
-
-        # ~ f = Adsr(attack=.01, decay=.2, sustain=.5, release=.1, dur=5, mul=.5)
-        # ~ a = Sine(mul=f).out()
-        # ~ f.play()
 
 def playSine (contour):
     freq = cv2.contourArea(contour)
@@ -607,7 +600,10 @@ def initPyoServer(pyoconfig):
     return s
 
 
-def configPyoServer():
+def configPyoServer(userconfig):
+    if (not userconfig):
+        return AMAudioConfig(AUDIOCONFIG, "", "")
+
     printDebug(pa_get_version_text())
 
     midioutput = int(input("Choose Audio[0] or Midi[1]:"))
@@ -637,10 +633,7 @@ def configPyoServer():
 
         print (outdev[pyodevice],"aka", index[pyodevice], "!!!!!")
 
-        pyconfig = AMAudioConfig(MIDICONFIG)
-        pyconfig.outdevice = index[pyodevice]
-        pyconfig.outdevicename = outdev[pyodevice]
-
+        pyconfig = AMAudioConfig(MIDICONFIG, index[pyodevice], outdev[pyodevice])
     else:
         print("Choose a host (aka sound card) from the list:")
         pa_list_host_apis()
@@ -676,9 +669,7 @@ def configPyoServer():
 
         print (outdev[pyodevice],"!!!!!")
 
-        pyconfig = AMAudioConfig(AUDIOCONFIG)
-        pyconfig.outdevice = pyodevice
-        pyconfig.outdevicename = outdev[pyodevice]
+        pyconfig = AMAudioConfig(AUDIOCONFIG, pyodevice, outdev[pyodevice])
 
     return pyconfig
 
@@ -706,19 +697,19 @@ def configPyoServer():
         # ~ cv2.waitKey(0)
 
 
-def print_proto():
-    print('PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO')
+def print_alpha():
+    print('ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA')
     print('Your are viewing some not released work... good luck!')
-    print('PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO\n')
+    print('ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA\n')
 
 # main
 if __name__ == "__main__":
-    print_proto()
+    print_alpha()
 
     parser = argparse.ArgumentParser(description='What about played music from structural architecture elements ?\n \
                                               ArchMusik is an image music player for architecture elements.\n\n \
-                                              Play the sound of the partition found in the image. \n \
-                                              Basic sinusoïd, (tocome) midi/osc/vdmx messages.')
+                                              Play the sound of the partition found in the image using \
+                                              basic sound synthesis or by sending MIDI messages.')
     parser.add_argument("-i", "--image",        required=True,
                         help="Path to the input image")
     parser.add_argument("-m", "--mode",         required=False,         default=MODE_HEAD,
@@ -763,17 +754,10 @@ if __name__ == "__main__":
     printDebug(("Norm:",argNormalize," Facto:",argFactorize," Thres:",argThreshold," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
     printDebug(("Audioconfig:",argAudioconfig, " Pyoconfig:",argPyoconfig))
 
-    pyoconfig = AMAudioConfig(AUDIOCONFIG)
-    if(argAudioconfig):
-        pyoconfig = configPyoServer()
+    # ~ pyoconfig = AMAudioConfig(AUDIOCONFIG)
+    # ~ if(argAudioconfig):
+    pyoconfig = configPyoServer(argAudioconfig)
     soundServer = initPyoServer(pyoconfig) #TODO Stop server ????
-
-    # ~ # load the image, convert it to grayscale, blur it slightly,
-    # ~ # and threshold it
-    # ~ image = cv2.imread(args["image"])
-    # ~ gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # ~ blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    # ~ thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY)[1]
 
     archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband, True)
     imagePath = args["image"]
@@ -801,9 +785,6 @@ if __name__ == "__main__":
         # show the image
         cv2.imshow("Image", archiMusik.thresh)
         cv2.waitKey(0)
-
-    # ~ _, threshold = cv2.threshold(archiMusik.thresh, 240, 255, cv2.THRESH_BINARY)
-    # ~ _, contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     archiMusik.findContours ()
     # ~ sys.exit(0)

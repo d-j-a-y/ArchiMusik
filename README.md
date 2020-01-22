@@ -1,7 +1,16 @@
 # ArchiMusik
-#### « an image file music player »
+#### « an image to music transcoder »
 
-Version [__Prototype__ | ~~Alpha~~ | ~~Beta~~ | ~~Released~~]
+Version [~~Prototype~~ | __Alpha__ | ~~Beta~~ | ~~Released~~]
+
+##WHAT THE HECK?
+#Generative Synthesis
+#In playhead mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape area.
+#In sequential mode, play each shape sequencialy. The generation of the audio synthesis is based on the shape area.
+#MIDI control
+#In playhead mode, the MIDI control are sent during the travelof the play head. The MIDI note is based on the shape area.
+#In sequential mode, play each shape sequencialy. The MIDI note is based on the shape area.
+
 
 ###### what about played music from structural architecture elements ?
 
@@ -10,9 +19,9 @@ Jérôme Blanchi aka d.j.a.y
 
 # Usage
 ```
-PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO
+ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
 Your are viewing some not released work... good luck!
-PROTO ----- PROTO ----- PROTO ----- PROTO ----- PROTO
+ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
 ```
 
 Quick start:
@@ -55,7 +64,7 @@ optional arguments:
 See the file [Issue.md](Issues.md) for known problem and task list and [LICENSE.md](LICENSE.md)
 for information about copyright and usage terms.
 
-Version [__Prototype__ | ~~Alpha~~ | ~~Beta~~ | ~~Released~~]
+Version [~~Prototype~~ | __Alpha__ | ~~Beta~~ | ~~Released~~]
 
 # Dependencies
 ___Important___ : Only support OpenCV 3.x
