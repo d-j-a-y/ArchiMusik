@@ -21,11 +21,11 @@
 
 ##WHAT THE HECK?
 #Generative Synthesis
-#In playhead mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape area.
-#In sequential mode, play each shape sequencialy. The generation of the audio synthesis is based on the shape area.
+#In playhead mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape.
+#In sequential mode, play each shape sequencialy. The generation of the audio synthesis is based on the shapes.
 #MIDI control
-#In playhead mode, the MIDI control are sent during the travelof the play head. The MIDI note is based on the shape area.
-#In sequential mode, play each shape sequencialy. The MIDI note is based on the shape area.
+#In playhead mode, the MIDI control are sent during the travel of the play head. The MIDI note is shape based.
+#In sequential mode, play each shape sequencialy. The MIDI note is based on the shape.
 
 
 ##ISSUES
@@ -53,6 +53,8 @@
 #MIDI(drafted)
 #OSC control
 #check error
+#generate also the argument for passing to -y/--pyoconfig)
+#  -v, --verbose         Enable debug output (default: off)
 
 ## import the necessary packages
 ### python internals
@@ -708,7 +710,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='What about played music from structural architecture elements ?\n \
                                               ArchMusik is an image music player for architecture elements.\n\n \
-                                              Play the sound of the partition found in the image using \
+                                              It transcode to sound the partition found in the image using \
                                               basic sound synthesis or by sending MIDI messages.')
     parser.add_argument("-i", "--image",        required=True,
                         help="Path to the input image")
