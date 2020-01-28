@@ -45,6 +45,7 @@
 #(HALFDONE)sleep time should be smarter ! FIXME : shape
 #invert/normaliz/factoriz/.... only working in head mode
 #largetohigh algo is hardcoded !!!
+#midi velocity is hardcoded velocity=90
 
 ##TODO
 #start a bunch of thread; aka thread list (thread bunch number as arg?)
@@ -60,7 +61,7 @@
 ### python internals
 import argparse
 import threading
-from math import log
+from math import log, exp, sqrt
 
 ### externals
 # ~ import imutils
@@ -157,7 +158,7 @@ class ThreadPlaySineLoop(threading.Thread):
         time.sleep(self.duration)
 
 class ThreadPlayMidiNote(threading.Thread):
-    """thread object for playing Sine"""
+    """thread object for playing Midi note"""
     def __init__(self, freq, duration, pyoserver, midichannel):
         threading.Thread.__init__(self)
         self.frequency = freq
@@ -167,31 +168,12 @@ class ThreadPlayMidiNote(threading.Thread):
 
     def run(self):
         freq = self.frequency
-        pitch = int( (REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/(MAX88116-MIN103)) + 0.5)
+        pitch = int( (REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/(MAX88116-MIN103)) + 0.5) #FIXME could be done earlier > in norma-facto mega loop ?
         pitchMaxMin = max(min (127,pitch), 0)
         # ~ pitch = Phasor(freq=11, mul=48, add=36)
         # ~ pit = int(pitch.get())
         printDebug (("Midi Mapping :" , self.duration, "-->", pitchMaxMin, '(',pitch,')', "channel:", self.midichannel))
         self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000), channel=self.midichannel)
-
-
-# ~ class ThreadPlayMidiNote(threading.Thread):
-    # ~ """thread object for playing Midi note"""
-    # ~ def __init__(self, freq, duration, pyoserver):
-        # ~ threading.Thread.__init__(self)
-        # ~ self.frequency = freq
-        # ~ self.duration = duration
-        # ~ self.pyoserver = pyoserver
-
-    # ~ def run(self):
-        # ~ freq = self.frequency
-
-        # ~ pitch = int(REFMINMIDINOTE+(freq - MIN103) * (REFMAXMIDINOTE-REFMINMIDINOTE)/MAX88116) #FIXME should be done earlier / norma-facto
-        # ~ # # ~ pitch = Phasor(freq=11, mul=48, add=36)
-        # ~ # # ~ pit = int(pitch.get())
-        # ~ printDebug (("Midi note :", pitch, "-->" , self.duration,"s"))
-
-        # ~ self.pyoserver.makenote(pitch=pitch, velocity=90, duration=int(self.duration * 1000))
 
 class DirectionHelper():
     """Helper class for direction factorization"""
@@ -361,8 +343,9 @@ class ContoursHelper():
         self.soundArea = factorizedArea
         return factorizedArea
 
-    ## return a log scaling area tab, default log basis is 10
+    ## return a log scaling area tab, default log basis is 10 (for use with -b)
     def getLogArea(self, scaletolog = True, logbasis = 10):
+        # ~ TODO:should be autoselected with logscale and -b option
         logArea = []
         nonlogArea = []
         logMax = log(MAX88116/MIN103, logbasis)
@@ -378,16 +361,91 @@ class ContoursHelper():
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
 
-        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
-        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
-        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
-        printDebug (("FIXMEFIXMEFIXME:shoud not force to -b "))
+        self.soundArea = logArea
+        return logArea
+
+
+
+# ~ Hi, I have a program which reads a file containing integers in [0,10].
+# ~ The program reads the value of a variable every 2 seconds, then maps it
+# ~ to another interval, say [20,22000],
+# ---------------------------
+# ~ You are looking for a function that maps a linear variable x onto an
+# ~ exponential variable y.
+# ~ y = A*exp(bx)
+# ~ using a for log(A), this is the same as
+# ~ log(y) = a + bx
+# ~ We have a form with two unknowns and we have two data points:
+# ~ log(20) = a + 0*b
+# ~ log(22000) = a + 10b
+# ~ so we know immediately that
+# ~ a = log(20)
+# ~ or A = 20
+# ~ and that
+# ~ b = (log(22000) - log(20)) / 10
+# ~ or
+# ~ b = log(1100) / 10
+# ~ so the mapping is
+# ~ log(y) = log(20) + x * log(1100)/10
+
+# ~ y = 20 * pow(1100, x/10);
+
+    # maps a linear variable x onto an exponential variable y.
+    def getLogAreaMA(self, scaletolog = True, logbasis = 10):
+        logArea = []
+        nonlogArea = []
+        # ~ logMax = (log(MAX88116, logbasis) - log(MIN103, logbasis)) / MAX88116
+        if(scaletolog == True):
+            for area in self.soundArea:
+                if 'defDebug' in globals():
+                    nonlogArea.append(area)
+                newarea = MIN103 + MIN103 * pow(MAX88116/MIN103, area/MAX88116)
+                logArea.append(newarea)
+        else:
+            factor = 1
+
+        printDebug (("AREA before log: ",nonlogArea))
+        printDebug (("AREA after log: ",logArea))
 
         self.soundArea = logArea
         return logArea
 
-    ## should return a inverse? of log scaling area tab, default log basis is 10
-    def getLogArea2(self, scaletolog = True, logbasis = 10):
+
+# ~ Instead of the function log(x), rather you have
+# ~ to use the following one: log(x - 1), for x >= 0.
+
+# ~ Then the interpolation formula for x in [x_1,x_2]
+# ~ with ratio f = a/(a+b), looks as follows:
+
+# ~ (log(x_2 -1) - log(x - 1)) / (log(x - 1) - log(x_1 - 1)) = (1/f) - 1
+
+# ~ After a simple calculation one can get
+
+# ~ x = (x_1 - 1)^{f - 1} * (x_2 - 1)^{f} + 1 ,
+
+   ## TESTUING should return a inverse? of log scaling area tab, default log basis is 10
+    def getLogAreaN(self, scaletolog = True, logbasis = 10):
+        logArea = []
+        nonlogArea = []
+        # ~ logMax = log(MAX88116/MIN103, logbasis)
+        if(scaletolog == True):
+            for area in self.soundArea:
+                if 'defDebug' in globals():
+                    nonlogArea.append(area)
+                newarea = MIN103 + (((MAX88116-MIN103) * log(area)) / sqrt(MAX88116))
+                logArea.append(newarea)
+        else:
+            factor = 1
+
+        printDebug (("AREA before log: ",nonlogArea))
+        printDebug (("AREA after log: ",logArea))
+
+        self.soundArea = logArea
+        return logArea
+
+
+    ## TESTUING should return a inverse? of log scaling area tab, default log basis is 10
+    def getLogAreaY(self, scaletolog = True, logbasis = 10):
         logArea = []
         nonlogArea = []
         logMax = log(MAX88116/MIN103, logbasis)
@@ -462,7 +520,7 @@ class ArchiMusik():
         self.approxContours = self.contoursHelper.approxContours()
         #sound data
         self.soundArea = self.contoursHelper.getFactorizedArea (self.factorize, self.invertband)
-        self.soundArea = self.contoursHelper.getLogArea (self.scaletolog, self.logbasis)
+        self.soundArea = self.contoursHelper.getLogAreaMA(self.scaletolog, self.logbasis)
 
     def LoopReadHead (self):
         rows,cols = self.thresh.shape[:2]
