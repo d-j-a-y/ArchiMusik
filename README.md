@@ -7,20 +7,34 @@ Version [~~Prototype~~ | __Alpha__ | ~~Beta~~ | ~~Released~~]
 # Author
 Jérôme Blanchi aka d.j.a.y
 
+Thanks to Vloop for some coding rendez-vous!
+
+# About
+See the file [Issue.md](Issues.md) for known problems and task list and [LICENSE.md](LICENSE.md)
+for information about copyright and usage terms.
+## WHAT THE HECK?
+### Generative Synthesis
+* In play head mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape.
+* In sequential mode, play each shape sequencially. The generation of the audio synthesis is based on the shape.
+### MIDI control
+* In play head mode, the MIDI control are sent during the travel of the play head. The MIDI note is based on the shape.
+* In sequential mode, play each shape sequencially. The MIDI note is shape based.
+
 # Usage
 ```
-ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
-Your are viewing some not released work... good luck!
-ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
+                        ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
+                        Your are viewing some not released work... good luck!
+                        ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA
 ```
 
-Quick start:
-download the last [source code](https://github.com/d-j-a-y/ArchiMusik/archive/master.zip), extract and launch!
+## Quick start:
+Download the latest [release](https://github.com/d-j-a-y/ArchiMusik/releases), extract and launch!
 ```
 $ /path/to/python3 archimusik.py -i ./test/rondrondrond.jpg
 ```
 
-Long story:
+There is more infos and dependencies in __Installation__ section.
+## Long story:
 ```
 usage: archimusik.py [-h] -i IMAGE [-m MODE] [-d DIRECTION] [-s]
                      [-t THRESHOLD] [-n] [-f] [-b] [-a] [-y PYOCONFIG] [-v]
@@ -54,53 +68,50 @@ optional arguments:
 
 ```
 
-See the file [Issue.md](Issues.md) for known problems and task list and [LICENSE.md](LICENSE.md)
-for information about copyright and usage terms.
-
-
-### WHAT THE HECK?
-#### Generative Synthesis
-* In playhead mode, the audio synthesis is generated during the travel of the play head. The audio synthesis is based on the shape.
-* In sequential mode, play each shape sequencialy. The generation of the audio synthesis is based on the shape.
-#### MIDI control
-* In playhead mode, the MIDI control are sent during the travel of the play head. The MIDI note is based on the shape.
-* In sequential mode, play each shape sequencialy. The MIDI note is shape based.
-
-
 Version [~~Prototype~~ | __Alpha__ | ~~Beta~~ | ~~Released~~]
 
-# Dependencies
-___Important___ : Only support OpenCV 3.x
+# Installation
+ArchiMusik -actually- is a standalone Python script.
+But, need some extra dependencies (a few bunch of hundreds of megao!)
 
-## Gnu/Linux
+* [Follow the release](https://github.com/d-j-a-y/ArchiMusik/releases) to install the latest or specific version of ArchiMusik.
+* Clone the git - https://github.com/d-j-a-y/ArchiMusik.git - or
+* download the [master](https://github.com/d-j-a-y/ArchiMusik/archive/master.zip) for fresh meat.
+
+## Dependencies
+___Important___ : Only support OpenCV 3.4 series
+
+### Gnu/Linux
 * Python3
 * Python3 pip (Debian package: python3-pip)
-* [OpenCV](http://opencv.org/), based on opencv 3.x
-* Python3 bindings for the computer vision library (Debian package: python3-opencv)
+* [OpenCV](http://opencv.org/), based on opencv 3.4 ! (Debian package: buster is only 3.2! __fixme__)
 
 ```
-sudo apt-get install python3-pip python3-opencv
+sudo apt-get install python3-pip
 ```
 
-### Python3 packages
+#### Python3 packages
 * [Numpy](https://numpy.org/), scientific computing.
 * [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
+* [OpenCV](http://opencv.org/)
 
 ```
-/path/to/python3 -m pip install numpy pyo --user --upgrade
+/path/to/python3 -m pip install numpy pyo opencv-python>=3.4.0,<4.0.0 --user --upgrade
 ```
 
-## Mac OsX
+### Mac OsX -draft-
 
 * Python3 - [python.org](https://www.python.org) -> install -> mac
 * Python3 / pip
 
-### Python3 packages
+#### Python3 packages
 
 * [Numpy](https://numpy.org/), scientific computing.
 * [OpenCV v3.x for Python](https://opencv.org/)  (3.4.8.29 .... check current version on https://pypi.org/ )
 * [Pyo](http://ajaxsoundstudio.com/pyodoc), audio server.
 
 ```
-/path/to/python3 -m pip install numpy pyo opencv-python==3.4.8.29 --user --upgrade
+/path/to/python3 -m pip install numpy pyo opencv-python>=3.4.0,<4.0.0 --user --upgrade
 ```
+
+### Others -todo-

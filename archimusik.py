@@ -31,7 +31,7 @@
 ##ISSUES
 #FIXED sound output and jack audio server:
 #######you need to set jack as output for pyo server
-####### export PYO_SERVER_AUDIO=jack
+####### -a command line option
 #sometime midi selection is out of bound ... ????
 #######ARE you crazy!
 #macosx opencv not display img
@@ -46,8 +46,12 @@
 #invert/normaliz/factoriz/.... only working in head mode
 #largetohigh algo is hardcoded !!!
 #midi velocity is hardcoded velocity=90
+#if log area; check-b for right log/exp function.
 
 ##TODO
+#shape recognicion - simple quadri : concave convex / rhombus rectanlge trapeze kite...
+#####https://en.wikipedia.org/wiki/Quadrilateral#Simple_quadrilaterals
+#shape recognicion - better circle reco
 #start a bunch of thread; aka thread list (thread bunch number as arg?)
 #SEQMODE:more sleep time (note time up) options (area based even for direc?)
 #(DONE)invert sound hight to area (as argument)
@@ -56,6 +60,7 @@
 #check error
 #generate also the argument for passing to -y/--pyoconfig)
 #  -v, --verbose         Enable debug output (default: off)
+#no-fullscreen argument
 
 ## import the necessary packages
 ### python internals
@@ -104,7 +109,7 @@ SB_X=0
 SB_Y=1
 
 # ~ SHAPE_TRIANGLE = 3
-# ~ SHAPE_RECTANGLE = 4
+# ~ SHAPE_QUADRILATERAL = 4
 # ~ SHAPE_PENTAGONE = 5
 # ~ SHAPE_ELLIPSE = 15
 # ~ SHAPE_CIRCLE = 16
@@ -271,7 +276,7 @@ class ContoursHelper():
         if len(approx) == 3:
             cv2.putText(image, "Triangle", (x, y), font, 1, (0))
         elif len(approx) == 4:
-            cv2.putText(image, "Rectangle", (x, y), font, 1, (0))
+            cv2.putText(image, "Quadrilateral", (x, y), font, 1, (0))
         elif len(approx) == 5:
             cv2.putText(image, "Pentagon", (x, y), font, 1, (0))
         elif 6 < len(approx) < 15:
@@ -311,8 +316,8 @@ class ContoursHelper():
         # ~ printDebug (("normalizedContours:", self.resolution,"Image area:",imgArea,"min:max", minArea, maxArea))
         for contour in self.contours:
             area = int(cv2.contourArea(contour))
-            printDebug (("contour area " , area))
-            if ((area <= maxArea) & (area >= minArea)): #FIXME area aka freq  #TODO Normalize
+            # ~ printDebug (("contour area " , area))
+            if ((area <= maxArea) & (area >= minArea)):
                 contoursNorm.append(contour)
 
         # ~ printDebug (("normalizedContours: ",contoursNorm))
@@ -337,6 +342,7 @@ class ContoursHelper():
                 area = math.fabs(area-(MAX88116/factor)-(MIN103/factor))
             factorizedArea.append(int(area * factor))
 
+        printDebug (("Factor by", factor))
         printDebug (("AREA before factor: ",nonfactorizedArea))
         printDebug (("AREA after factor: ",factorizedArea))
 
@@ -354,9 +360,7 @@ class ContoursHelper():
                 if 'defDebug' in globals():
                     nonlogArea.append(area)
                 newarea = (MAX88116 * log(area / MIN103, logbasis)) / logMax
-                logArea.append(newarea)
-        else:
-            factor = 1
+                logArea.append(int(newarea))
 
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
@@ -399,10 +403,8 @@ class ContoursHelper():
             for area in self.soundArea:
                 if 'defDebug' in globals():
                     nonlogArea.append(area)
-                newarea = MIN103 + MIN103 * pow(MAX88116/MIN103, area/MAX88116)
-                logArea.append(newarea)
-        else:
-            factor = 1
+                newarea = MIN103 * pow(MAX88116/MIN103, area/MAX88116)
+                logArea.append(int(newarea))
 
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
@@ -433,9 +435,7 @@ class ContoursHelper():
                 if 'defDebug' in globals():
                     nonlogArea.append(area)
                 newarea = MIN103 + (((MAX88116-MIN103) * log(area)) / sqrt(MAX88116))
-                logArea.append(newarea)
-        else:
-            factor = 1
+                logArea.append(int(newarea))
 
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
@@ -454,9 +454,7 @@ class ContoursHelper():
                 if 'defDebug' in globals():
                     nonlogArea.append(area)
                 newarea = (MIN103 * logbasis ** ((logMax * area) / MAX88116))
-                logArea.append(newarea)
-        else:
-            factor = 1
+                logArea.append(int(newarea))
 
         printDebug (("AREA before log: ",nonlogArea))
         printDebug (("AREA after log: ",logArea))
@@ -509,6 +507,29 @@ class ArchiMusik():
             self.thresh = cv2.threshold(self.blurred, self.thershold, 255, cv2.THRESH_BINARY)[1]
             self.resolution = (int(self.image.shape[1]), int(self.image.shape[0]))
 
+    def showImage(self, img, delay=0):
+        cv2.imshow("ARchiMusik", img)
+        cv2.waitKey(delay) # Refresh the opencv window, needed from 3.4
+
+    def setSoundServer(self, sndSrv):
+        if (sndSrv is None):
+            raise ValueError('A very bad thing happened : sound server is not valid  ')
+        self.soundServer = sndSrv
+
+    def prepareGUI(self):
+        # ~ cv2.startWindowThread()
+        cv2.namedWindow("ARchiMusik", cv2.WND_PROP_FULLSCREEN  | cv2.WINDOW_GUI_NORMAL)
+        cv2.setWindowTitle("ARchiMusik", "Listen to the facade")
+        cv2.setWindowProperty("ARchiMusik",cv2.WND_PROP_FULLSCREEN,cv2.WINDOW_FULLSCREEN)
+
+    def findMonitorRes(self):
+        """return a lenght and height monitor resolution"""
+        imgRect = cv2.getWindowImageRect("ARchiMusik")
+        self.monitorX = (imgRect[0]*2+imgRect[2])
+        self.monitorY = (imgRect[1]*2+imgRect[3])
+        printDebug(("monitor image rect",imgRect, "X:Y",self.monitorX,self.monitorY))
+
+
     def findContours(self, normalize=None):
         self.contoursHelper = ContoursHelper(self.thresh, self.resolution)
         if (normalize != None):
@@ -535,7 +556,7 @@ class ArchiMusik():
         # ~ simpleBounds = getSimpleBounds(cnts)
         # ~ printDebug (len(simpleBounds))
 
-        soundServer.start()
+        self.soundServer.start()
 
         tpFactory = ThreadPlayFactory()
         tpType = ''
@@ -548,7 +569,7 @@ class ArchiMusik():
         midiChannel = 0
 
         for readhead_position in range(dh.index):
-            readheadImg = readHeadDraw((dh.x0,dh.y0), (dh.x1,dh.y1))
+            readheadImg = readHeadDraw((dh.x0,dh.y0), (dh.x1,dh.y1), self)
             i = 0
             # ~ printDebug (("x0y0 x1y1", (dh.x0,dh.y0), (dh.x1,dh.y1)))
             for sb in self.simpleBounds:
@@ -566,19 +587,21 @@ class ArchiMusik():
                     midiChannel = not midiChannel
 
                     length = sb[dh.shapeMAX][dh.Axe] - sb[dh.shapeMIN][dh.Axe]
-                    tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, soundServer, midiChannel).start()
+                    tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, self.soundServer, midiChannel).start()
 
                 i+=1
 
-            cv2.imshow("ARchiMusik", cv2.add (readheadImg, self.thresh))
+            self.showImage(cv2.add (readheadImg, self.thresh),1)
             dh.next(readhead_position)
             time.sleep(readSpeed)
 
-        soundServer.stop()
+        self.soundServer.stop()
 
 
     def LoopSequence(self):
-        cv2.imshow("ARchiMusik", self.thresh)
+        self.showImage(self.thresh)
+        # ~ imgRect = cv2.getWindowImageRect("ARchiMusik")
+        # ~ print(imgRect)
 
         # FIXME
         # ~ tpFactory = ThreadPlayFactory()
@@ -599,9 +622,9 @@ class ArchiMusik():
 
             self.contoursHelper.drawFourPoints(self.simpleBounds[i], self.thresh)
 
-            cv2.imshow("ARchiMusik", self.thresh)
+            self.showImage(self.thresh)
             # FIXME !
-            # ~ tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, soundServer).start()
+            # ~ tpFactory.create_tp(tpType, self.soundArea[i], length*readSpeed, self.soundServer).start()
 
             playSine(approx)
             i = i + 1
@@ -631,7 +654,7 @@ def playSine (contour):
     soundServer.stop()
     time.sleep(.1)
 
-def readHeadDraw (startPos, endPos):
+def readHeadDraw (startPos, endPos, archiMusik):
     if (False):#TODO full img white and ghost readHead
         readhead = np.full((archiMusik.image.shape[0],archiMusik.image.shape[1]), 255, np.uint8) #FIXME clean the image in place of create a new one
         cv2.line(readhead, startPos, endPos, (0,255,255), 2)
@@ -695,15 +718,15 @@ def configPyoServer(userconfig):
 
         pyconfig = AMAudioConfig(MIDICONFIG, index[pyodevice], outdev[pyodevice])
     else:
-        print("Choose a host (aka sound card) from the list:")
-        pa_list_host_apis()
+        # ~ print("Choose a host (aka sound card) from the list:")
+        # ~ pa_list_host_apis()
 
     #    pa_list_devices()
 
-        if  withJack() :
-            print("JACK [OK] : Pyo Sound server is built with jack support")
-        else:
-            print("JACK [KO] : Pyo Sound server do not support jack")
+        # ~ if  withJack() :
+            # ~ print("JACK [OK] : Pyo Sound server is built with jack support")
+        # ~ else:
+            # ~ print("JACK [KO] : Pyo Sound server do not support jack")
 
         print("Choose an output device from the list:")
         outdev, index = pa_get_output_devices()
@@ -762,8 +785,7 @@ def print_alpha():
     print('Your are viewing some not released work... good luck!')
     print('ALPHA ----- ALPHA ----- ALPHA ----- ALPHA ----- ALPHA\n')
 
-# main
-if __name__ == "__main__":
+def main():
     print_alpha()
 
     parser = argparse.ArgumentParser(description='What about played music from structural architecture elements ?\n \
@@ -814,45 +836,59 @@ if __name__ == "__main__":
     printDebug(("Norm:",argNormalize," Facto:",argFactorize," Thres:",argThreshold," Mode:",argMode," Direc:",argDirection," Shape:",argShapes))
     printDebug(("Audioconfig:",argAudioconfig, " Pyoconfig:",argPyoconfig))
 
+    archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband, True) #TODO is log arg
+
     # ~ pyoconfig = AMAudioConfig(AUDIOCONFIG)
     # ~ if(argAudioconfig):
     pyoconfig = configPyoServer(argAudioconfig)
-    soundServer = initPyoServer(pyoconfig) #TODO Stop server ????
+    try:
+        archiMusik.setSoundServer (initPyoServer(pyoconfig))
+    except ValueError as err:
+        printError(err.args)
+        exitme()
 
-    archiMusik = ArchiMusik(argMode, argDirection, argShapes, argThreshold, argNormalize, argFactorize, argInvertband, True)
     imagePath = args["image"]
     try:
         archiMusik.loadImage(imagePath)
     except ValueError as err:
         printError(err.args)
-        exitme() #TODO stop server ?
+        exitme() #TODO stop server !
 
     printDebug(archiMusik.resolution)
 
     # output image declaration
     # ~ imout = None # np.ones((image.shape[0],image.shape[1],3), np.uint8)
 
+   # prepare the ui
+    archiMusik.prepareGUI()
+    # display a temporary image to get monitor resolution. (FIXME : screen flick, check for nicer solution xrandr?)
+    if False :
+        imgTmp = np.full((1,1), 0, np.uint8) #FIXME clean the image in place of create a new one
+        self.showImage(self.thresh)
+        imgRect = cv2.getWindowImageRect("ARchiMusik")
+        print("windows size",imgRect)
+        print("monitor:",imgRect[0]*2+imgRect[2],"x",imgRect[1]*2+imgRect[3])
+    # ~ exit(0)
+    archiMusik.showImage(archiMusik.thresh) #FIXME not is not an explicit name
+    archiMusik.findMonitorRes()
+
     if False :
         # show the image
-        cv2.imshow("Image", image)
+        cv2.imshow("ARchiMusik", archiMusik.image)
         cv2.waitKey(0)
         # show the image
-        cv2.imshow("Image", gray)
+        cv2.imshow("ARchiMusik", gray)
         cv2.waitKey(0)
         # show the image
-        cv2.imshow("Image", blurred)
+        cv2.imshow("ARchiMusik", blurred)
         cv2.waitKey(0)
         # show the image
-        cv2.imshow("Image", archiMusik.thresh)
+        cv2.imshow("ARchiMusik", archiMusik.thresh)
         cv2.waitKey(0)
 
     archiMusik.findContours ()
     # ~ sys.exit(0)
     # ~ printDebug(("Contours dump ! \n",archiMusik.contours))
-
-    # prepare the ui
-    cv2.startWindowThread()
-    cv2.namedWindow("ARchiMusik")
 
     #prepare the readHead image (old)
     # ~ readHeadImg = np.ones((image.shape[0],image.shape[1],3), np.uint8)
@@ -874,3 +910,7 @@ if __name__ == "__main__":
     # ~ contours = normalizedContours(contours)
 
     archiMusik.play(pyoconfig.type)
+
+# protect the main
+if __name__ == "__main__":
+    main()
